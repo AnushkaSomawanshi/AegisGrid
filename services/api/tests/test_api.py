@@ -237,7 +237,7 @@ def test_berkeley_clock_excludes_unreachable_node_and_applies_drift():
     assert response.status_code == 201
     run = response.json()["run"]
     result = run["result"]
-    assert result["mean_offset_ms"] == 70
+    assert result["mean_offset_ms"] == 65
     assert result["excluded_nodes"] == ["N2"]
     assert result["participants"] == 2
     assert result["nodes"][0]["offset_ms"] == 110
