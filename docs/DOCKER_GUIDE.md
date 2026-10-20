@@ -1,7 +1,7 @@
 # Docker Guide
 
 ## What runs
-The Compose stack contains five independent services: frontend/Nginx, FastAPI API, event-worker consumer, PostgreSQL and RabbitMQ. Containers communicate through the Compose network using service names. Only the frontend/API and RabbitMQ management console are published to host ports by default; PostgreSQL and AMQP remain internal.
+The Compose stack contains six independent services: frontend/Nginx, FastAPI API, event-worker consumer, outbox dispatcher, PostgreSQL and RabbitMQ. Containers communicate through the Compose network using service names. Only the frontend/API and RabbitMQ management console are published to host ports by default; PostgreSQL and AMQP remain internal.
 
 ## Start the project
 ```bash
