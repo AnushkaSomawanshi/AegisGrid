@@ -58,6 +58,11 @@ def test_resource_inventory_and_reservation():
         "resource_id": available["id"], "requested_by": "second-dispatch"
     })
     assert conflict.status_code == 409
+    reservation_id = response.json()["reservation"]["id"]
+    released = client.post(f"/api/reservations/{reservation_id}/release")
+    assert released.status_code == 200
+    assert released.json()["reservation"]["status"] == "released"
+    assert released.json()["resource"]["status"] == "available"
 
 
 def test_stepwise_experiment_persists_trace_and_result():
