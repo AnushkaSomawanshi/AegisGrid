@@ -417,7 +417,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             for right in trace[left_index+1:]:
                 a,b=left["vector_after"],right["vector_after"]
                 a_le_b=all(x<=y for x,y in zip(a,b))
-                b_le_a=all(x<=y for x,y in zip(a,b))
+                b_le_a=all(x<=y for x,y in zip(b,a))
                 a_strict=a_le_b and any(x<y for x,y in zip(a,b))
                 b_strict=b_le_a and any(x<y for x,y in zip(b,a))
                 relation="A-happened-before-B" if a_strict else "B-happened-before-A" if b_strict else "equal" if a==b else "concurrent"
