@@ -241,6 +241,10 @@ The current implementation branch adds persisted resource inventory/reservations
 | `POST /api/experiments/{id}/reset` | Reset the saved trace cursor |
 | `POST /api/beacons/simulate` | Generate a configurable heartbeat timeout/recovery trace |
 | `GET /api/forensics/{incident_id}` | Reconstruct chronologically matching persisted incident events |
+| `GET /api/outbox` | Inspect event outbox state and publication attempts |
+| `POST /api/outbox/{id}/retry` | Retry a pending outbox message explicitly |
+| `POST /api/experiments/{id}/pause` and `/resume` | Pause/resume a persisted trace cursor |
+| `POST /api/experiments/{id}/inject-failure` | Insert a labelled simulated fault into a trace; no real service is stopped |
 
 ### Run the new panels
 
