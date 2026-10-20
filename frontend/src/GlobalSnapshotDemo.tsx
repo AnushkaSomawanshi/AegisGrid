@@ -44,4 +44,4 @@ export function GlobalSnapshotDemo({onBack}:{onBack:()=>void}){
  </div>;
 }
 function NetworkIcon(){return <Workflow size={17}/>}
-function DatabaseIcon(){return <Activity size={17}/}
+function DatabaseIcon(){return <Activity size={17} />}
