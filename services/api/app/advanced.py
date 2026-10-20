@@ -769,7 +769,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         # Deterministic eligible-order scheduler: each requester waits for deferred peers to release and reply.
         for r in sorted(requests,key=lambda x:(x["timestamp"],x["pid"])):
             p=r["pid"]
-            for q in (1,2,3):
+            for q in participants:
                 if q==p: continue
                 if f"P{p}" in states[q]["deferred_replies"]:
                     states[q]["deferred_replies"].remove(f"P{p}")
