@@ -8,7 +8,10 @@ data:
   DATABASE_PORT: "5432"
   DATABASE_NAME: aegisgrid
   DATABASE_USER: aegisgrid
-  CORS_ORIGINS: "http://localhost:3000"
+  CORS_ORIGINS: "http://localhost:30080"
+  POSTGRES_DB: aegisgrid
+  POSTGRES_USER: aegisgrid
+  RABBITMQ_USER: aegisgrid
 ---
 apiVersion: v1
 kind: Secret
@@ -18,6 +21,7 @@ metadata:
 type: Opaque
 stringData:
   POSTGRES_PASSWORD: "replace-before-use"
+  RABBITMQ_PASSWORD: "replace-before-use-too"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,10 +44,18 @@ spec:
             - name: http
               containerPort: 8000
           env:
-            - name: DATABASE_URL
-              value: postgresql://aegisgrid:replace-before-use@aegisgrid-postgres:5432/aegisgrid
+            - name: POSTGRES_HOST
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: DATABASE_HOST}}
+            - name: POSTGRES_PORT
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: DATABASE_PORT}}
+            - name: POSTGRES_DB
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: POSTGRES_DB}}
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: POSTGRES_PASSWORD}}
             - name: RABBITMQ_URL
-              value: amqp://guest:guest@aegisgrid-rabbitmq:5672/
+              value: amqp://aegisgrid:replace-before-use-too@aegisgrid-rabbitmq:5672/
             - name: CORS_ORIGINS
               valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: CORS_ORIGINS}}
           readinessProbe:
@@ -192,6 +204,11 @@ spec:
       containers:
         - name: rabbitmq
           image: rabbitmq:3.13-management-alpine
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: RABBITMQ_USER}}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: RABBITMQ_PASSWORD}}
           ports:
             - containerPort: 5672
             - containerPort: 15672
