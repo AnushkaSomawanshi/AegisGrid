@@ -303,6 +303,134 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             "execution_mode": "simulation",
             "note": "Logical timestamps express causal ordering; they are not wall-clock time and do not order independent concurrent events."
         }
+    if lab_id == "vector":
+        scenario = str(parameters.get("scenario", "basic-causality"))
+        operations = parameters.get("operations")
+        if operations is None:
+            operations = [
+                {"process":"P1","kind":"local","label":"Create incident","event_id":"E1"},
+                {"process":"P1","kind":"send","label":"Send dispatch request to P2","message_id":"M1","to":"P2","event_id":"E2"},
+                {"process":"P2","kind":"receive","label":"Receive dispatch request","message_id":"M1","from":"P1","event_id":"E3"},
+                {"process":"P2","kind":"local","label":"Allocate response unit","event_id":"E4"},
+                {"process":"P3","kind":"local","label":"Independent inventory check","event_id":"E5"},
+                {"process":"P2","kind":"send","label":"Publish inventory update to P3","message_id":"M2","to":"P3","event_id":"E6"},
+                {"process":"P3","kind":"receive","label":"Receive inventory update","message_id":"M2","from":"P2","event_id":"E7"},
+                {"process":"P1","kind":"local","label":"Independent dispatch update","event_id":"E8"}
+            ]
+        if scenario == "independent":
+            operations = [
+                {"process":"P1","kind":"local","label":"Dispatch board refresh","event_id":"E1"},
+                {"process":"P2","kind":"local","label":"Resource cache refresh","event_id":"E2"},
+                {"process":"P3","kind":"local","label":"Inventory audit","event_id":"E3"}
+            ]
+        elif scenario == "multi-hop":
+            operations = [
+                {"process":"P1","kind":"local","label":"Create incident","event_id":"E1"},
+                {"process":"P1","kind":"send","label":"Send dispatch to P2","message_id":"M1","to":"P2","event_id":"E2"},
+                {"process":"P2","kind":"receive","label":"Receive dispatch","message_id":"M1","from":"P1","event_id":"E3"},
+                {"process":"P2","kind":"send","label":"Forward update to P3","message_id":"M2","to":"P3","event_id":"E4"},
+                {"process":"P3","kind":"receive","label":"Receive forwarded update","message_id":"M2","from":"P2","event_id":"E5"}
+            ]
+        elif scenario == "concurrent":
+            operations = [
+                {"process":"P1","kind":"local","label":"Create dispatch update","event_id":"E1"},
+                {"process":"P1","kind":"send","label":"Send P1 update to P2","message_id":"M1","to":"P2","event_id":"E2"},
+                {"process":"P2","kind":"receive","label":"Receive P1 update","message_id":"M1","from":"P1","event_id":"E3"},
+                {"process":"P2","kind":"local","label":"Allocate unit","event_id":"E4"},
+                {"process":"P3","kind":"local","label":"Independent inventory update","event_id":"E5"}
+            ]
+        if not isinstance(operations, list) or not operations or len(operations) > 100:
+            raise HTTPException(422, "operations must be a list of 1 to 100 events")
+        clocks: dict[str, list[int]] = {}
+        last_event: dict[str, str] = {}
+        sent_messages: dict[str, dict[str, Any]] = {}
+        used_ids: set[str] = set()
+        trace: list[dict[str, Any]] = []
+        process_names = {"P1":"Incident & Dispatch","P2":"Resource Coordination","P3":"Inventory & Monitoring"}
+        for index, operation in enumerate(operations):
+            if not isinstance(operation, dict):
+                raise HTTPException(422, "each vector operation must be an object")
+            process = operation.get("process", "P1")
+            kind = operation.get("kind", "local")
+            if process not in {"P1", "P2", "P3"}:
+                raise HTTPException(422, "vector clock process must be P1, P2, or P3")
+            if kind not in {"local", "send", "receive"}:
+                raise HTTPException(422, "vector event kind must be local, send, or receive")
+            event_id = operation.get("event_id", f"E{index + 1}")
+            label = operation.get("label", kind.replace("_", " "))
+            if not isinstance(event_id, str) or not event_id.strip() or len(event_id) > 40 or event_id in used_ids:
+                raise HTTPException(422, "event_id must be unique and non-empty")
+            if not isinstance(label, str) or not label.strip() or len(label) > 160:
+                raise HTTPException(422, "label must be a non-empty string of at most 160 characters")
+            used_ids.add(event_id)
+            before = list(clocks.get(process, [0, 0, 0]))
+            component = int(process[1:]) - 1
+            previous = last_event.get(process)
+            predecessors = [previous] if previous else []
+            item: dict[str, Any] = {"step":index+1,"event_id":event_id,"process":process,
+                "process_name":process_names[process],"event":kind,"label":label.strip(),
+                "clock_before":before,"clock_after":None,"vector_before":before,
+                "causal_predecessors":predecessors,"execution_mode":"simulation"}
+            if kind == "receive":
+                message_id = operation.get("message_id")
+                if not isinstance(message_id, str) or message_id not in sent_messages:
+                    raise HTTPException(422, "receive event must reference an earlier send message_id")
+                sent = sent_messages[message_id]
+                expected_from = operation.get("from")
+                if expected_from is not None and expected_from != sent["sender"]:
+                    raise HTTPException(422, "receive sender does not match the message sender")
+                if sent["receiver"] is not None and sent["receiver"] != process:
+                    raise HTTPException(422, "message was sent to a different process")
+                message_vector = list(sent["message_vector"])
+                merged = [max(before[k], message_vector[k]) for k in range(3)]
+                merged[component] += 1
+                after = merged
+                item.update({"message_id":message_id,"sender":sent["sender"],"message_vector":message_vector,
+                    "merge_vector": [max(before[k], message_vector[k]) for k in range(3)],
+                    "clock_after":after,"vector_after":after,
+                    "calculation":f"max({before}, {message_vector}) component-wise, then increment {process} -> {after}",
+                    "causal_predecessors":list(dict.fromkeys(predecessors+[sent["event_id"]]))})
+            else:
+                after = list(before)
+                after[component] += 1
+                item.update({"clock_after":after,"vector_after":after,
+                    "calculation":f"increment {process} component: {before} -> {after}"})
+                if kind == "send":
+                    message_id = operation.get("message_id", f"M{index+1}")
+                    receiver = operation.get("to")
+                    if not isinstance(message_id, str) or not message_id.strip() or message_id in sent_messages:
+                        raise HTTPException(422, "send message_id must be unique and non-empty")
+                    if receiver is not None and receiver not in {"P1","P2","P3"}:
+                        raise HTTPException(422, "message receiver must be P1, P2, or P3")
+                    item.update({"message_id":message_id,"receiver":receiver,"message_vector":list(after)})
+                    sent_messages[message_id]={"sender":process,"receiver":receiver,"message_vector":list(after),"event_id":event_id}
+            clocks[process]=list(after)
+            last_event[process]=event_id
+            trace.append(item)
+        edges=[]
+        for event in trace:
+            for predecessor in event["causal_predecessors"]:
+                is_message=event["event"]=="receive" and event.get("message_id") in sent_messages and sent_messages[event["message_id"]]["event_id"]==predecessor
+                edges.append({"from":predecessor,"to":event["event_id"],"relation":"message" if is_message else "process-order"})
+        comparisons=[]
+        for left_index,left in enumerate(trace):
+            for right in trace[left_index+1:]:
+                a,b=left["vector_after"],right["vector_after"]
+                a_le_b=all(x<=y for x,y in zip(a,b))
+                b_le_a=all(x<=y for x,y in zip(a,b))
+                a_strict=a_le_b and any(x<y for x,y in zip(a,b))
+                b_strict=b_le_a and any(x<y for x,y in zip(b,a))
+                relation="A-happened-before-B" if a_strict else "B-happened-before-A" if b_strict else "equal" if a==b else "concurrent"
+                comparisons.append({"a":left["event_id"],"b":right["event_id"],"vector_a":a,"vector_b":b,"relation":relation})
+        return trace, {"algorithm":"Vector clocks","component_order":["P1","P2","P3"],
+            "processes":[{"process":p,"name":process_names[p],"final_vector":v} for p,v in clocks.items()],
+            "final_process_vectors":clocks,
+            "messages":[{"message_id":key,"sender":value["sender"],"receiver":value["receiver"],
+                "message_vector":value["message_vector"],"send_event_id":value["event_id"]} for key,value in sent_messages.items()],
+            "causal_edges":edges,"event_comparisons":comparisons,
+            "concurrent_pairs":[c for c in comparisons if c["relation"]=="concurrent"],
+            "execution_mode":"simulation",
+            "note":"Vector timestamps and causal relations are derived from the deterministic event trace; they are not wall-clock times or live process telemetry."}
     if lab_id == "snapshot":
         processes = parameters.get("processes", ["P1", "P2", "P3"])
         initiator = parameters.get("initiator", "P1")
@@ -632,7 +760,7 @@ def list_reservations(db: Session = Depends(get_db)):
 
 @router.post("/experiments", status_code=201)
 def create_experiment(body: ExperimentCreate, db: Session = Depends(get_db)):
-    parameters = {**body.parameters, "scenario": body.scenario} if body.lab_id == "snapshot" else body.parameters
+    parameters = {**body.parameters, "scenario": body.scenario} if body.lab_id in {"snapshot", "vector"} else body.parameters
     trace, result = _trace_for(body.lab_id, parameters)
     row = ExperimentRun(lab_id=body.lab_id, scenario=body.scenario, parameters=json.dumps(parameters),
                         trace=json.dumps(trace), result=json.dumps(result), status="ready", current_step=0)
