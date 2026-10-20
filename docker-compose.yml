@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aegisgrid-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aegisgrid
+      POSTGRES_USER: aegisgrid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only-change-me}
+    ports:
+      - "5433:5432"
+    volumes:
+      - aegisgrid_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegisgrid -d aegisgrid"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [aegisgrid]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: aegisgrid-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: aegisgrid
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-dev-rabbitmq-only}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [aegisgrid]
+
+  api:
+    build:
+      context: ./services/api
+    container_name: aegisgrid-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://aegisgrid:${POSTGRES_PASSWORD:-local-dev-only-change-me}@postgres:5432/aegisgrid
+      RABBITMQ_URL: amqp://aegisgrid:${RABBITMQ_PASSWORD:-local-dev-rabbitmq-only}@rabbitmq:5672/
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [aegisgrid]
+
+  worker:
+    build:
+      context: ./services/worker
+    container_name: aegisgrid-event-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://aegisgrid:${POSTGRES_PASSWORD:-local-dev-only-change-me}@postgres:5432/aegisgrid
+      RABBITMQ_URL: amqp://aegisgrid:${RABBITMQ_PASSWORD:-local-dev-rabbitmq-only}@rabbitmq:5672/
+      WORKER_NAME: event-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [aegisgrid]
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: aegisgrid-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [aegisgrid]
+
+volumes:
+  aegisgrid_pgdata:
+
+networks:
+  aegisgrid:
+    driver: bridge

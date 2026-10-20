@@ -1,0 +1,29 @@
+name: AegisGrid CI
+on:
+  push:
+    branches: [main, feature/aegisgrid-foundation]
+  pull_request:
+    branches: [main]
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/api/requirements.txt pytest
+      - run: PYTHONPATH=services/api pytest -q services/api/tests
+        env:
+          DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
