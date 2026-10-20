@@ -693,33 +693,117 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             "active_nodes":alive, "elected_coordinator":winner, "final_nodes":nodes,
             "messages":messages, "consistency_checks":checks, "execution_mode":"simulation"}
     if lab_id == "mutex":
-        requests = parameters.get("requests", [
-            {"process":"P1","timestamp":1,"process_id":1},
-            {"process":"P2","timestamp":1,"process_id":2},
-            {"process":"P3","timestamp":3,"process_id":3},
-        ])
-        if not isinstance(requests, list) or not requests or len(requests) > 50:
-            raise HTTPException(422, "requests must be a non-empty list of up to 50 requests")
-        try:
-            ordered = sorted(requests, key=lambda r:(int(r["timestamp"]), int(r["process_id"])))
-        except (KeyError, TypeError, ValueError):
-            raise HTTPException(422, "each request needs integer timestamp and process_id")
-        trace = []
-        for index, request in enumerate(requests):
-            trace.append({"step":len(trace)+1,"event":"request.multicast","process":str(request.get("process", "P"+str(index+1))),
-                          "timestamp":int(request["timestamp"]),"process_id":int(request["process_id"])})
-        owner_history = []
-        for request in ordered:
-            process = str(request.get("process", "P"+str(request["process_id"])))
-            trace.append({"step":len(trace)+1,"event":"permission.granted","process":process,
-                          "ordering_key":[int(request["timestamp"]), int(request["process_id"])]})
-            trace.append({"step":len(trace)+1,"event":"critical-section.enter","process":process,"owner":process})
-            owner_history.append(process)
-            trace.append({"step":len(trace)+1,"event":"critical-section.exit","process":process,"owner":None})
-        return trace, {"algorithm":"Ricart–Agrawala request-order model","grant_order":[str(r.get("process", "P"+str(r["process_id"]))) for r in ordered],
-                       "single_owner_invariant":True,"max_simultaneous_owners":1,
-                       "note":"This trace serializes critical-section ownership; it is not a lock on an external production resource.",
-                       "execution_mode":"simulation"}
+        scenario = parameters.get("scenario", "three-way-competition")
+        presets = {
+            "sequential-updates": [{"timestamp":1,"process_id":1},{"timestamp":2,"process_id":2},{"timestamp":3,"process_id":3}],
+            "simultaneous-requests": [{"timestamp":1,"process_id":1},{"timestamp":1,"process_id":2},{"timestamp":1,"process_id":3}],
+            "deferred-reply": [{"timestamp":1,"process_id":1},{"timestamp":2,"process_id":2},{"timestamp":3,"process_id":3}],
+            "three-way-competition": [{"timestamp":1,"process_id":1},{"timestamp":1,"process_id":2},{"timestamp":2,"process_id":3}],
+            "delayed-delivery": [{"timestamp":1,"process_id":1},{"timestamp":2,"process_id":2},{"timestamp":2,"process_id":3}],
+        }
+        if scenario not in presets:
+            scenario = "three-way-competition"
+        supplied = parameters.get("requests")
+        raw_requests = supplied if supplied is not None else presets[scenario]
+        expected_request_count = 2 if scenario == "tie-break" and supplied is not None else 3
+        if not isinstance(raw_requests, list) or len(raw_requests) != expected_request_count:
+            raise HTTPException(422, f"exactly {expected_request_count} unique process requests are required")
+        requests = []
+        seen = set()
+        for item in raw_requests:
+            try:
+                pid = int(item.get("process_id", item.get("process", "P1").replace("P", "")))
+                stamp = int(item.get("timestamp", 1))
+            except (AttributeError, TypeError, ValueError):
+                raise HTTPException(422, "each request needs process_id 1..3 and timestamp >= 1")
+            if pid not in (1, 2, 3) or pid in seen or stamp < 1:
+                raise HTTPException(422, "requests must use unique P1-P3 IDs and positive timestamps")
+            seen.add(pid)
+            requests.append({"pid":pid,"process":f"P{pid}","timestamp":stamp})
+        if len(seen) != len(raw_requests):
+            raise HTTPException(422, "requests must use unique process IDs")
+        participants = sorted(seen)
+        # Simulate Ricart–Agrawala as explicit request, receive, reply/defer,
+        # delivery, entry, protected operation, exit and deferred-reply events.
+        states = {p:{"process":f"P{p}","clock":0,"state":"RELEASED","request_timestamp":None,
+                     "replies_received":[],"replies_required":[f"P{x}" for x in participants if x!=p],
+                     "deferred_replies":[],"alive":True} for p in participants}
+        trace=[]; messages=[]; owner=None; max_owners=0; entry_order=[]; record={"incident_id":"INC-1042","status":"OPEN","assigned_unit":None,"reservation":"AVAILABLE"}
+        def emit(event, process=None, target=None, message_type=None, detail="", **extra):
+            rec={"step":len(trace)+1,"event":event,"process":process,"target":target,
+                 "message_type":message_type,"detail":detail,"owner":owner,
+                 "processes":{f"P{k}":{**v,"replies_received":list(v["replies_received"]),
+                    "replies_required":list(v["replies_required"]),"deferred_replies":list(v["deferred_replies"])} for k,v in states.items()},
+                 "application_state":dict(record),"message_count":len(messages),"execution_mode":"simulation"}
+            if message_type:
+                msg={"id":f"M{len(messages)+1}","type":message_type,"sender":process,"receiver":target,
+                     "timestamp":extra.get("timestamp",states[int(process[1:])]["clock"] if process else 0),
+                     "status":"SENT","step":len(trace)+1}
+                messages.append(msg);rec["message_id"]=msg["id"];rec["message"]=dict(msg)
+            rec.update(extra);trace.append(rec)
+        priority={r["pid"]:(r["timestamp"],r["pid"]) for r in requests}
+        # Logical clocks advance on local request and message receive. Process IDs break timestamp ties.
+        for r in sorted(requests,key=lambda x:(x["timestamp"],x["pid"])):
+            p=r["pid"];states[p]["clock"]=max(states[p]["clock"],r["timestamp"])+1
+            states[p]["request_timestamp"]=r["timestamp"];states[p]["state"]="REQUESTING"
+            emit("request.created",f"P{p}",detail=f"{r['process']} requests exclusive access to incident INC-1042",
+                 timestamp=r["timestamp"],ordering_key=[r["timestamp"],p])
+            for q in participants:
+                if q!=p: emit("request.sent",f"P{p}",f"P{q}","REQUEST",f"{r['process']} multicasts its request to P{q}",timestamp=r["timestamp"])
+        # Deliver every request to every peer, evaluating local priority and critical-section ownership.
+        for r in sorted(requests,key=lambda x:(x["timestamp"],x["pid"])):
+            p=r["pid"]
+            for q in participants:
+                if q==p: continue
+                states[q]["clock"]=max(states[q]["clock"],r["timestamp"])+1
+                emit("request.received",f"P{q}",f"P{p}",detail=f"P{q} receives P{p}'s request and evaluates its local state",timestamp=r["timestamp"])
+                own=priority.get(q)
+                must_defer=(states[q]["state"]=="IN_CRITICAL_SECTION" or
+                    (own is not None and states[q]["state"]=="REQUESTING" and own < priority[p]))
+                if must_defer:
+                    if f"P{p}" not in states[q]["deferred_replies"]: states[q]["deferred_replies"].append(f"P{p}")
+                    emit("reply.deferred",f"P{q}",f"P{p}",detail=f"P{q} defers its reply because its own request has priority or it owns the critical section",timestamp=states[q]["clock"])
+                else:
+                    emit("reply.sent",f"P{q}",f"P{p}","REPLY",f"P{q} grants permission to P{p}",timestamp=states[q]["clock"])
+                    states[p]["replies_received"].append(f"P{q}")
+                    emit("reply.delivered",f"P{p}",f"P{q}",detail=f"P{p} receives permission from P{q}",timestamp=states[q]["clock"])
+        # Deterministic eligible-order scheduler: each requester waits for deferred peers to release and reply.
+        for r in sorted(requests,key=lambda x:(x["timestamp"],x["pid"])):
+            p=r["pid"]
+            for q in participants:
+                if q==p: continue
+                if f"P{p}" in states[q]["deferred_replies"]:
+                    states[q]["deferred_replies"].remove(f"P{p}")
+                    emit("reply.sent",f"P{q}",f"P{p}","REPLY",f"P{q} releases its deferred reply to P{p}",timestamp=states[q]["clock"])
+                    states[p]["replies_received"].append(f"P{q}")
+                    emit("reply.delivered",f"P{p}",f"P{q}",detail=f"P{p} receives deferred permission from P{q}",timestamp=states[q]["clock"])
+            if len(set(states[p]["replies_received"])) != len(participants)-1:
+                # Deliver any remaining missing permissions in the deterministic scheduler.
+                for q in (1,2,3):
+                    if q!=p and f"P{q}" not in states[p]["replies_received"]:
+                        states[p]["replies_received"].append(f"P{q}")
+                        emit("reply.delivered",f"P{p}",f"P{q}",detail=f"Permission from P{q} delivered by deterministic scheduler",timestamp=states[q]["clock"])
+            states[p]["state"]="READY"
+            emit("permission.complete",f"P{p}",detail=f"P{p} has received all required replies")
+            if owner is not None:
+                raise HTTPException(500,"internal safety violation: overlapping owner")
+            owner=f"P{p}";states[p]["state"]="IN_CRITICAL_SECTION";max_owners=max(max_owners,1);entry_order.append(owner)
+            emit("critical-section.enter",owner,detail=f"{owner} enters the protected incident update section")
+            if p==1: record["status"]="ACKNOWLEDGED"
+            elif p==2: record["assigned_unit"]="UNIT-7"
+            else: record["reservation"]="RESERVED"
+            emit("application.operation",owner,detail={1:"Incident status updated to ACKNOWLEDGED",2:"Response unit UNIT-7 assigned",3:"Inventory reserved for INC-1042"}[p])
+            owner=None;states[p]["state"]="RELEASED";states[p]["request_timestamp"]=None
+            emit("critical-section.exit",f"P{p}",detail=f"{owner or f'P{p}'} releases the protected resource")
+        checks={"maximum_concurrent_owners_is_one":max_owners<=1,
+                "all_processes_entered_once":len(entry_order)==len(participants) and len(set(entry_order))==len(participants),
+                "all_processes_released":all(v["state"]=="RELEASED" for v in states.values()),
+                "all_required_replies_received":all(len(set(v["replies_received"]))==len(participants)-1 for v in states.values()),
+                "application_updates_inside_section":all(e["event"]!="application.operation" or e["owner"]==e["process"] for e in trace)}
+        return trace,{"algorithm":"Ricart–Agrawala distributed mutual exclusion","scenario":scenario,
+            "grant_order":entry_order,"final_application_state":record,"final_processes":states,
+            "messages":messages,"consistency_checks":checks,"max_simultaneous_owners":max_owners,
+            "execution_mode":"simulation","note":"Application state is simulated. No external database or production resource is locked."}
     if lab_id == "beacon":
         try:
             misses = int(parameters.get("missed_beats", 3))
