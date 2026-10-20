@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import aio_pika
+import httpx
 import psycopg
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +30,7 @@ RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = os.getenv("RABBITMQ_PORT", "5672")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "aegisgrid")
 RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "local-dev-rabbitmq-only")
+LOAD_RUNNER_URL = os.getenv("LOAD_RUNNER_URL", "http://load-runner:8010")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 db_lock = asyncio.Lock()
@@ -224,6 +226,10 @@ class VectorAction(BaseModel):
 class ExperimentRequest(BaseModel):
     scenario: str = "worked-example"
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+class LoadTestRequest(BaseModel):
+    concurrency: int = Field(default=10, ge=1, le=100)
+    duration_seconds: int = Field(default=5, ge=1, le=30)
 
 @app.get("/health/live")
 def health_live():
@@ -1039,6 +1045,26 @@ def labs_index():
       {"id":"streaming","name":"Stream-Oriented Communication","status":"IMPLEMENTED","mode":"generated telemetry over WebSocket","endpoint":"/ws/telemetry"},
       {"id":"infrastructure","name":"Docker and Kubernetes","status":"DOCUMENTED","mode":"runtime-observation","endpoint":"/health/ready"}
     ]
+
+@app.post("/api/experiments/load-test")
+async def run_measured_load_test(body: LoadTestRequest):
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(40.0, connect=3.0)) as client:
+            response = await client.post(f"{LOAD_RUNNER_URL.rstrip('/')}/run", json=body.model_dump())
+            response.raise_for_status()
+            result = response.json()
+    except Exception as exc:
+        raise HTTPException(503, f"Load runner unavailable or failed: {exc}")
+    run_id = result["run_id"]
+    result["scenario"] = "measured-health-endpoint-load"
+    with connect_db() as conn:
+        conn.execute(
+            "INSERT INTO experiment_runs(id,concept,scenario,result) VALUES(%s,%s,%s,%s)",
+            (run_id, "scalability", "measured-health-endpoint-load", json.dumps(result))
+        )
+        conn.commit()
+    await publish_event("Experiment.LoadTest.Completed", result, run_id)
+    return result
 
 @app.get("/api/experiments")
 def list_experiments():
