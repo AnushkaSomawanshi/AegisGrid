@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Download, Pause, Play, RotateCcw, Server, ShieldCheck, SlidersHorizontal, StepForward, Workflow, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Download, Play, RotateCcw, Server, ShieldCheck, SlidersHorizontal, StepForward, Workflow, Zap } from "lucide-react";
 import "./physical-clock-lab.css";
 
 type NodeClock = { id: string; label: string; role: string; offset: number; delay: number; available: boolean };
@@ -26,7 +26,6 @@ const presets = {
 };
 type Preset = keyof typeof presets;
 const ms = (n: number) => (n > 0 ? "+" : "") + n + " ms";
-const signed = (n: number) => (n > 0 ? "+" : "") + n;
 
 export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   const [nodes, setNodes] = useState<NodeClock[]>(initialNodes);
@@ -49,12 +48,13 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   const activeEvent = trace.find(e => e.id === selectedEvent) || trace[trace.length - 1];
   const completed = stage === "verify";
   const progress = stage === "ready" ? 0 : stages.findIndex(s => s.id === stage) + 1;
+  const maxDisagreement = accepted.length ? Math.max(...accepted.map(n => n.offset)) - Math.min(...accepted.map(n => n.offset)) : 0;
   const avgAbsBefore = accepted.length ? Math.round(accepted.reduce((s, n) => s + Math.abs(n.offset - estimate), 0) / accepted.length) : 0;
   const avgAbsAfter = accepted.length ? Math.round(accepted.reduce((s, n) => s + Math.abs((n.corrected ?? n.offset) - estimate), 0) / accepted.length) : 0;
   const incidentRows = useMemo(() => [
-    { service: "Incident intake", event: "incident.created", raw: 1000 + nodes[0].offset, corrected: 1000 + (nodes[0].corrected ?? nodes[0].offset), node: nodes[0].id },
-    { service: "Dispatch service", event: "unit.assignment.created", raw: 1120 + nodes[1].offset, corrected: 1120 + (nodes[1].corrected ?? nodes[1].offset), node: nodes[1].id },
-    { service: "Event worker", event: "worker.processed", raw: 1190 + nodes[3].offset, corrected: 1190 + (nodes[3].corrected ?? nodes[3].offset), node: nodes[3].id },
+    { service: "Incident intake", event: "incident.created", raw: 1000 + nodes[0].offset, corrected: 1000 + (stage === "apply" || stage === "verify" ? nodes[0].offset : nodes[0].offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - nodes[0].offset))), node: nodes[0].id },
+    { service: "Dispatch service", event: "unit.assignment.created", raw: 1120 + nodes[1].offset, corrected: 1120 + (stage === "apply" || stage === "verify" ? nodes[1].offset : nodes[1].offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - nodes[1].offset))), node: nodes[1].id },
+    { service: "Event worker", event: "worker.processed", raw: 1190 + nodes[3].offset, corrected: 1190 + (stage === "apply" || stage === "verify" ? nodes[3].offset : nodes[3].offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - nodes[3].offset))), node: nodes[3].id },
   ], [nodes, stage, estimate, maxCorrection]);
 
   function addEvent(event: Omit<TraceEvent, "id">) {
