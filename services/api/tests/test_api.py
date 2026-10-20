@@ -519,3 +519,48 @@ def test_mutual_exclusion_step_reset_replays_trace():
     replay = client.post(f"/api/experiments/{run_id}/step")
     assert replay.status_code == 200
     assert replay.json()["event"] == first.json()["event"]
+
+
+def test_message_communication_studio_tracks_delivery_ack_and_retry():
+    response = client.post("/api/experiments", json={
+        "lab_id":"messaging","scenario":"delivery-retry",
+        "parameters":{"scenario":"delivery-retry","workload":"mixed","mode":"messaging",
+                      "producer_rate":8,"consumer_rate":5,"buffer_capacity":20}
+    })
+    assert response.status_code == 201
+    run = response.json()["run"]
+    assert run["result"]["algorithm"] == "Message-oriented vs stream-oriented communication"
+    assert run["result"]["retry_count"] >= 1
+    events = [event["event"] for event in run["trace"]]
+    assert "message.created" in events
+    assert "message.delivery_failed" in events
+    assert "message.retry_scheduled" in events
+    assert "message.acknowledged" in events
+    assert all("state" in event and "at_ms" in event and "transport" in event for event in run["trace"])
+
+
+def test_stream_communication_studio_tracks_bytes_buffer_and_reconnect():
+    response = client.post("/api/experiments", json={
+        "lab_id":"stream","scenario":"interruption",
+        "parameters":{"scenario":"interruption","workload":"mixed","mode":"stream",
+                      "producer_rate":8,"consumer_rate":5,"buffer_capacity":20}
+    })
+    assert response.status_code == 201
+    run = response.json()["run"]
+    assert run["result"]["bytes_produced"] > 0
+    assert any(event["event"] == "stream.bytes_produced" for event in run["trace"])
+    assert any(event["event"] == "stream.disconnected" for event in run["trace"])
+    assert any(event["event"] == "stream.reconnected" for event in run["trace"])
+    assert any(event["event"] == "stream.frame_decoded" for event in run["trace"])
+
+
+def test_communication_studio_validates_scenario_rates_and_capacity():
+    invalid = [
+        {"scenario":"unknown","producer_rate":8,"consumer_rate":5,"buffer_capacity":20},
+        {"scenario":"normal","producer_rate":0,"consumer_rate":5,"buffer_capacity":20},
+        {"scenario":"normal","producer_rate":8,"consumer_rate":101,"buffer_capacity":20},
+        {"scenario":"normal","producer_rate":8,"consumer_rate":5,"buffer_capacity":0},
+    ]
+    for parameters in invalid:
+        response = client.post("/api/experiments",json={"lab_id":"messaging","parameters":parameters})
+        assert response.status_code == 422
