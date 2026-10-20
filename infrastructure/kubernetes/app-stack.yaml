@@ -29,7 +29,7 @@ metadata:
   name: aegisgrid-api
   namespace: aegisgrid
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels: {app: aegisgrid-api}
   template:
@@ -54,8 +54,14 @@ spec:
               valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: POSTGRES_USER}}
             - name: POSTGRES_PASSWORD
               valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: POSTGRES_PASSWORD}}
-            - name: RABBITMQ_URL
-              value: amqp://aegisgrid:replace-before-use-too@aegisgrid-rabbitmq:5672/
+            - name: RABBITMQ_HOST
+              value: aegisgrid-rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: RABBITMQ_USER}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: RABBITMQ_PASSWORD}}
             - name: CORS_ORIGINS
               valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: CORS_ORIGINS}}
           readinessProbe:
@@ -73,7 +79,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: aegisgrid-api
+  name: api
   namespace: aegisgrid
 spec:
   selector: {app: aegisgrid-api}
