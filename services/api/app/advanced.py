@@ -975,7 +975,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                        "messages_sent":state["messages_sent"],"messages_delivered":state["messages_delivered"],
                        "messages_acknowledged":state["messages_acknowledged"],"bytes_produced":state["bytes_produced"],
                        "bytes_consumed":state["bytes_consumed"],"retry_count":state["retry_count"],
-                       "execution_mode":"deterministic_simulation","runtime_verified":False,
+                       "execution_mode":"simulation","simulation_detail":"deterministic","runtime_verified":False,
                        "summary":"Simulation evidence only; broker and socket delivery are not verified against live infrastructure."}
     trace = [
         {"step":1,"event":"baseline.configured","replicas":1,"measurement":"not-run"},
