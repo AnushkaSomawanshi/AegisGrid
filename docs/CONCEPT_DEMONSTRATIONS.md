@@ -207,3 +207,32 @@ For each lab, present:
 4. The invariant or expected behavior.
 5. A failure case or counterexample.
 6. The limitation and distinction between simulation and actual runtime evidence.
+
+
+## 13. Lamport logical clocks — execution studio
+
+The Lamport clock page is an event-by-event execution studio rather than a theory-only article. Its incident-dispatch scenario models three logical processes: P1 (Incident & Dispatch), P2 (Resource Coordination) and P3 (Inventory & Monitoring). These are simulation identities, not a claim that these are separate deployed services.
+
+### Default trace
+
+| Event | Process | Operation | Clock update | Meaning |
+|---|---|---|---|---|
+| E1 | P1 | Create incident | 0 → 1 | Local event increments P1 |
+| E2 | P1 | Send M1 to P2 | 1 → 2 | The sent message carries timestamp 2 |
+| E3 | P2 | Receive M1 | max(0, 2) + 1 = 3 | The receive is causally after E2 |
+| E4 | P2 | Assign response unit | 3 → 4 | Local event follows the receive |
+| E5 | P3 | Independent inventory refresh | 0 → 1 | Independent of E1–E4 in this scenario |
+
+The ledger records event ID, process, event type, previous clock, message timestamp when applicable, resulting clock, calculation, and causal predecessors. The causality view uses process-order edges and message send-to-receive edges. The visible row order is only the trace presentation order; it must not be interpreted as proof that E5 happened before or after another process's event.
+
+### Interactive controls and scenarios
+
+- Create a persisted run, step one event at a time, run the remaining trace, pause/resume, reset the cursor and export the run evidence as JSON.
+- Presets cover incident dispatch, a receive with a higher incoming timestamp, independent processes and multiple messages.
+- The scenario editor accepts a bounded JSON event list. Local and send events increment the process clock by one. A receive derives its message timestamp from an earlier send with the same message ID and computes `max(local_clock, message_clock) + 1`; the timestamp is not trusted from a manually entered receive field.
+- The backend rejects unknown receive message IDs, duplicate send IDs, duplicate event IDs and receiver/sender mismatches when routing metadata is provided.
+- Run history and step state use the existing experiment API and persistence lifecycle.
+
+### Interpretation and limits
+
+Lamport timestamps can establish a consistent direction for causally related events but cannot prove that two unrelated events are concurrent in real time, and a scalar timestamp does not fully identify concurrency. This is a deterministic teaching simulation: it does not instrument the actual API, database, worker or broker, and it does not claim wall-clock timestamps or live distributed-process behavior.
