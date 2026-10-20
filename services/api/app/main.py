@@ -458,6 +458,11 @@ async def lamport_receive(message_id: str, body: EventAction):
     await publish_event("Lab.Lamport.MessageReceived",event)
     return {"state":lab,"event":event}
 
+@app.post("/api/labs/lamport/reset")
+def lamport_reset():
+    state["lamport"] = init_lamport()
+    return state["lamport"]
+
 # ---------- Vector clocks ----------
 def init_vector():
     pids=["P1","P2","P3","P4","P5"]
@@ -499,6 +504,11 @@ def vector_compare(body: dict[str,list[int]]):
     elif b_le_a: relation="B_BEFORE_A"
     else: relation="CONCURRENT"
     return {"a":a,"b":b,"relation":relation,"explanation":{"A_BEFORE_B":"Every component of A is <= B and at least one is smaller.","B_BEFORE_A":"Every component of B is <= A and at least one is smaller.","CONCURRENT":"Neither vector is component-wise <= the other.","EQUAL":"The vectors are identical."}[relation]}
+
+@app.post("/api/labs/vector/reset")
+def vector_reset():
+    state["vector"] = init_vector()
+    return state["vector"]
 
 # ---------- Global snapshot / Chandy-Lamport-style educational simulation ----------
 def init_snapshot():
@@ -659,6 +669,11 @@ async def snapshot_run(body: EventAction):
             break
         lab = await snapshot_step()
     return lab
+
+@app.post("/api/labs/global-snapshot/reset")
+def snapshot_reset():
+    state["global_snapshot"] = init_snapshot()
+    return state["global_snapshot"]
 
 # ---------- Election lab: deterministic Bully algorithm trace ----------
 def init_election():
@@ -828,6 +843,18 @@ async def mutex_release(process_id: str):
     grant_waiting_request(lab)
     state["mutual_exclusion"]=lab
     await publish_event("Lab.MutualExclusion.Release",{"process_id":process_id,"owner":lab["owner"]})
+    return lab
+
+@app.post("/api/labs/mutual-exclusion/scenario/simultaneous")
+async def mutex_scenario_simultaneous():
+    lab=init_mutex()
+    state["mutual_exclusion"]=lab
+    # Deterministic ordered replay models requests arriving in the same experiment window.
+    # Logical timestamps and process IDs define deterministic priority; this is not OS-level concurrency.
+    for pid in ["P3","P1","P4"]:
+        lab=await mutex_request(pid)
+    lab["events"].append({"kind":"scenario.note","text":"Competing requests were replayed deterministically; process timestamps and IDs decide the protocol order.","at":utcnow()})
+    state["mutual_exclusion"]=lab
     return lab
 
 @app.post("/api/labs/mutual-exclusion/reset")
