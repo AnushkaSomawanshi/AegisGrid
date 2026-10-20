@@ -43,3 +43,53 @@ def test_event_ledger():
 
 def test_invalid_lab():
     assert client.get("/api/labs/not-a-lab").status_code == 404
+
+
+def test_resource_inventory_and_reservation():
+    seeded = client.post("/api/resources/demo-seed")
+    assert seeded.status_code == 200
+    available = next(r for r in seeded.json()["items"] if r["code"] == "MED-04")
+    response = client.post("/api/reservations", json={
+        "resource_id": available["id"], "requested_by": "test-dispatch"
+    })
+    assert response.status_code == 201
+    assert response.json()["resource"]["status"] == "reserved"
+    conflict = client.post("/api/reservations", json={
+        "resource_id": available["id"], "requested_by": "second-dispatch"
+    })
+    assert conflict.status_code == 409
+
+
+def test_stepwise_experiment_persists_trace_and_result():
+    created = client.post("/api/experiments", json={
+        "lab_id": "physical-clock", "scenario": "offset-baseline",
+        "parameters": {"offsets": [-100, 0, 100]}
+    })
+    assert created.status_code == 201
+    run = created.json()["run"]
+    assert run["result"]["mean_offset_ms"] == 0
+    first = client.post(f"/api/experiments/{run['id']}/step")
+    assert first.status_code == 200
+    assert first.json()["event"]["node"] == "node-1"
+    assert first.json()["run"]["current_step"] == 1
+    reset = client.post(f"/api/experiments/{run['id']}/reset")
+    assert reset.json()["run"]["current_step"] == 0
+
+
+def test_beacon_simulation_and_forensics():
+    beacon = client.post("/api/beacons/simulate", json={
+        "node_id": "node-test", "interval_ms": 500, "timeout_ms": 1000,
+        "missed_beats": 3, "recover": True
+    })
+    assert beacon.status_code == 200
+    assert beacon.json()["execution_mode"] == "simulation"
+    assert beacon.json()["final_state"] == "healthy"
+    incident = client.post("/api/incidents", json={
+        "title": "Forensics test incident", "category": "Medical",
+        "severity": "high", "location": "Zone test", "description": "trace test"
+    })
+    incident_id = incident.json()["incident"]["id"]
+    report = client.get(f"/api/forensics/{incident_id}")
+    assert report.status_code == 200
+    assert report.json()["incident"]["id"] == incident_id
+    assert len(report.json()["nodes"]) >= 1
