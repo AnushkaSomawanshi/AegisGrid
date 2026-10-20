@@ -154,13 +154,18 @@ function App(){
    <div className="page-content">
     {notice&&<div className="notice"><CheckCircle2 size={16}/><span>{notice}</span><button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={15}/></button></div>}
     {page==="command"&&<CommandCenter overview={overview} incidents={incidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
-    {page==="resources"&&<ResourceCenter/>}\n    {page==="messaging"&&<MessagingConsole/>}\n    {page==="stream"&&<StreamMonitor/>}\n    {page==="experiments"&&<ExperimentWorkbench/>}
+    {page==="resources"&&<ResourceCenter/>}
+    {page==="messaging"&&<MessagingConsole/>}
+    {page==="stream"&&<StreamMonitor/>}
+    {page==="experiments"&&<ExperimentWorkbench/>}
     {page==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("experiments")}/>}
     {page==="vector-demo"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
     {page==="election-demo"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab==="election"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
-    {page==="labs"&&selectedLab==="vector"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}\n    {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
-    {page==="forensics"&&<ForensicsConsole/>}\n    {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
+    {page==="labs"&&selectedLab==="vector"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
+    {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
+    {page==="forensics"&&<ForensicsConsole/>}
+    {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
     {page==="labs"&&selectedLab==="messaging"&&<CommunicationDemo onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab==="stream"&&<CommunicationDemo onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
