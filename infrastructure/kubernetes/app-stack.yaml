@@ -1,0 +1,219 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegisgrid-config
+  namespace: aegisgrid
+data:
+  DATABASE_HOST: aegisgrid-postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: aegisgrid
+  DATABASE_USER: aegisgrid
+  CORS_ORIGINS: "http://localhost:3000"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aegisgrid-secrets
+  namespace: aegisgrid
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "replace-before-use"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisgrid-api
+  namespace: aegisgrid
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: aegisgrid-api}
+  template:
+    metadata:
+      labels: {app: aegisgrid-api}
+    spec:
+      containers:
+        - name: api
+          image: aegisgrid-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql://aegisgrid:replace-before-use@aegisgrid-postgres:5432/aegisgrid
+            - name: RABBITMQ_URL
+              value: amqp://guest:guest@aegisgrid-rabbitmq:5672/
+            - name: CORS_ORIGINS
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: CORS_ORIGINS}}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health/live, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegisgrid-api
+  namespace: aegisgrid
+spec:
+  selector: {app: aegisgrid-api}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisgrid-frontend
+  namespace: aegisgrid
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: aegisgrid-frontend}
+  template:
+    metadata:
+      labels: {app: aegisgrid-frontend}
+    spec:
+      containers:
+        - name: frontend
+          image: aegisgrid-frontend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegisgrid-frontend
+  namespace: aegisgrid
+spec:
+  type: NodePort
+  selector: {app: aegisgrid-frontend}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisgrid-postgres
+  namespace: aegisgrid
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: aegisgrid-postgres}
+  template:
+    metadata:
+      labels: {app: aegisgrid-postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: DATABASE_NAME}}
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: DATABASE_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: POSTGRES_PASSWORD}}
+          volumeMounts:
+            - name: database
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec: {command: ["sh", "-c", "pg_isready -U aegisgrid -d aegisgrid"]}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 1Gi}
+      volumes:
+        - name: database
+          persistentVolumeClaim: {claimName: aegisgrid-postgres-pvc}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aegisgrid-postgres-pvc
+  namespace: aegisgrid
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegisgrid-postgres
+  namespace: aegisgrid
+spec:
+  selector: {app: aegisgrid-postgres}
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisgrid-rabbitmq
+  namespace: aegisgrid
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: aegisgrid-rabbitmq}
+  template:
+    metadata:
+      labels: {app: aegisgrid-rabbitmq}
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.13-management-alpine
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          readinessProbe:
+            exec: {command: ["rabbitmq-diagnostics", "-q", "ping"]}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 768Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegisgrid-rabbitmq
+  namespace: aegisgrid
+spec:
+  selector: {app: aegisgrid-rabbitmq}
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672
