@@ -10,6 +10,7 @@ import {
 import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter, StreamMonitor } from "./AdvancedPanels";
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
 import { CommandCenter } from "./CommandCenter";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import "./command-center.css";
 import { VectorClockDemo } from "./VectorClockDemo";
 import { LeaderElectionDemo } from "./LeaderElectionDemo";
