@@ -181,3 +181,17 @@ def test_protocol_models_compute_results_from_parameters():
     }).json()["run"]
     assert mutex["result"]["grant_order"] == ["P1", "P2"]
     assert mutex["result"]["max_simultaneous_owners"] == 1
+
+
+def test_snapshot_model_records_markers_and_in_transit_messages():
+    run = client.post("/api/experiments", json={
+        "lab_id": "snapshot", "scenario": "three-process-snapshot",
+        "parameters": {
+            "processes": ["P1", "P2", "P3"], "initiator": "P1",
+            "messages_in_transit": [{"from":"P2","to":"P3","message":"m7"}]
+        }
+    }).json()["run"]
+    assert run["result"]["consistent_cut"] is True
+    assert run["result"]["process_states_recorded"] == 3
+    assert run["result"]["messages_in_transit_recorded"] == 1
+    assert any(event["event"] == "marker.received" for event in run["trace"])
