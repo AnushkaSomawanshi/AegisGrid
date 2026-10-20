@@ -106,15 +106,90 @@ class BeaconRequest(BaseModel):
 def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Build a deterministic trace for the named model; never label it as live telemetry."""
     if lab_id == "physical-clock":
-        offsets = parameters.get("offsets", [-120, 30, 80, -10])
-        if not isinstance(offsets, list) or not offsets or len(offsets) > 20 or any(not isinstance(v, (int, float)) for v in offsets):
-            raise HTTPException(422, "offsets must be a non-empty list of at most 20 numbers")
-        mean = round(sum(offsets) / len(offsets), 2)
-        trace = [{"step": i+1, "event": "clock.sampled", "node": f"node-{i+1}", "offset_ms": value,
-                  "adjustment_ms": round(mean-value, 2), "model_value_ms": round(value+mean-value, 2)}
-                 for i, value in enumerate(offsets)]
+        offsets = parameters.get("offsets", [120, 40, -60, 200, 300])
+        if (not isinstance(offsets, list) or not 2 <= len(offsets) <= 20
+                or any(isinstance(v, bool) or not isinstance(v, (int, float)) or abs(v) > 86400000 for v in offsets)):
+            raise HTTPException(422, "offsets must contain 2 to 20 finite numeric millisecond offsets within +/- 86400000")
+        drift_rates = parameters.get("drift_rates_ms_per_s", [0] * len(offsets))
+        if (not isinstance(drift_rates, list) or len(drift_rates) != len(offsets)
+                or any(isinstance(v, bool) or not isinstance(v, (int, float)) or abs(v) > 1000 for v in drift_rates)):
+            raise HTTPException(422, "drift_rates_ms_per_s must match offsets and contain rates within +/- 1000")
+        elapsed_s = parameters.get("simulated_elapsed_s", 0)
+        delay_ms = parameters.get("message_delay_ms", 0)
+        if isinstance(elapsed_s, bool) or not isinstance(elapsed_s, (int, float)) or not 0 <= elapsed_s <= 3600:
+            raise HTTPException(422, "simulated_elapsed_s must be between 0 and 3600 seconds")
+        if isinstance(delay_ms, bool) or not isinstance(delay_ms, (int, float)) or not 0 <= delay_ms <= 60000:
+            raise HTTPException(422, "message_delay_ms must be between 0 and 60000")
+        excluded = parameters.get("unreachable_nodes", [])
+        node_ids = ["C0"] + [f"N{i}" for i in range(1, len(offsets))]
+        if not isinstance(excluded, list) or any(node not in node_ids for node in excluded):
+            raise HTTPException(422, "unreachable_nodes must be a list of configured node IDs (C0, N1, ...)")
+        excluded_set = set(excluded)
+        nodes = []
+        for i, offset in enumerate(offsets):
+            node_id = node_ids[i]
+            drifted = round(float(offset) + float(drift_rates[i]) * float(elapsed_s), 2)
+            nodes.append({"node": node_id, "initial_offset_ms": round(float(offset), 2),
+                          "offset_ms": drifted, "drift_rate_ms_per_s": float(drift_rates[i]),
+                          "reported_offset_ms": None, "adjustment_ms": 0.0,
+                          "corrected_offset_ms": drifted, "status": "unreachable" if node_id in excluded_set else "waiting"})
+        participants = [n for n in nodes if n["node"] not in excluded_set]
+        if not participants:
+            raise HTTPException(422, "at least one reachable clock is required for a synchronization round")
+        trace = []
+        def add(event: str, **fields: Any) -> None:
+            trace.append({"step": len(trace) + 1, "event": event, **fields, "execution_mode": "simulation"})
+        for node in nodes:
+            if node["node"] == "C0":
+                continue
+            if node["node"] in excluded_set:
+                add("clock.poll.timeout", node=node["node"], timeout_ms=max(100, int(delay_ms) * 3),
+                    decision="excluded-from-average", message_delay_ms=delay_ms)
+            else:
+                add("clock.poll.sent", coordinator="C0", node=node["node"], message_delay_ms=delay_ms)
+                add("clock.reading.received", coordinator="C0", node=node["node"],
+                    reported_offset_ms=node["offset_ms"], message_delay_ms=delay_ms)
+                node["reported_offset_ms"] = node["offset_ms"]
+                node["status"] = "reported"
+        if "C0" not in excluded_set:
+            nodes[0]["reported_offset_ms"] = nodes[0]["offset_ms"]
+            nodes[0]["status"] = "reported"
+            add("clock.coordinator.sampled", node="C0", reported_offset_ms=nodes[0]["offset_ms"])
+        else:
+            add("clock.coordinator.unavailable", node="C0", decision="coordinator-reading-excluded")
+        mean = round(sum(float(n["reported_offset_ms"]) for n in participants if n["reported_offset_ms"] is not None)
+                     / sum(1 for n in participants if n["reported_offset_ms"] is not None), 2)
+        reported = [n for n in participants if n["reported_offset_ms"] is not None]
+        if not reported:
+            raise HTTPException(422, "no clock readings were received; synchronization round cannot complete")
+        mean = round(sum(float(n["reported_offset_ms"]) for n in reported) / len(reported), 2)
+        add("clock.average.computed", participants=[n["node"] for n in reported], excluded_nodes=sorted(excluded_set),
+            reported_offsets_ms={n["node"]: n["reported_offset_ms"] for n in reported}, mean_offset_ms=mean,
+            formula="sum(participating offsets) / participating node count")
+        for node in nodes:
+            if node["node"] in excluded_set or node["reported_offset_ms"] is None:
+                continue
+            adjustment = round(mean - float(node["reported_offset_ms"]), 2)
+            node["adjustment_ms"] = adjustment
+            add("clock.correction.sent", coordinator="C0", node=node["node"],
+                adjustment_ms=adjustment, target_offset_ms=mean)
+            node["corrected_offset_ms"] = mean
+            node["status"] = "synchronized"
+            add("clock.correction.applied", node=node["node"], adjustment_ms=adjustment,
+                previous_offset_ms=node["offset_ms"], corrected_offset_ms=mean)
+        initial_values = [float(n["offset_ms"]) for n in reported]
+        final_values = [float(n["corrected_offset_ms"]) for n in reported]
+        initial_spread = round(max(initial_values) - min(initial_values), 2)
+        final_spread = round(max(final_values) - min(final_values), 2)
+        add("clock.round.completed", participants=[n["node"] for n in reported],
+            excluded_nodes=sorted(excluded_set), final_spread_ms=final_spread, status="completed")
         return trace, {"algorithm": "Berkeley-style average-offset model", "mean_offset_ms": mean,
-                       "participants": len(offsets), "status": "calculated", "execution_mode": "simulation"}
+                       "participants": len(reported), "participant_nodes": [n["node"] for n in reported],
+                       "excluded_nodes": sorted(excluded_set), "nodes": nodes,
+                       "initial_spread_ms": initial_spread, "final_spread_ms": final_spread,
+                       "message_delay_ms": delay_ms, "simulated_elapsed_s": elapsed_s,
+                       "status": "calculated", "execution_mode": "simulation",
+                       "note": "Offsets and delays are synthetic. Delay is trace metadata, not a packet-level delay estimator."}
     if lab_id == "lamport":
         operations = parameters.get("operations", [
             {"process":"P1","kind":"local","label":"create incident"},
