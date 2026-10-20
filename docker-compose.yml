@@ -1,0 +1,77 @@
+services:
+  frontend:
+    build: ./frontend
+    ports: ["3000:80"]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  api:
+    build: ./services/api
+    environment:
+      DATABASE_URL: postgresql+psycopg://aegisgrid:${POSTGRES_PASSWORD:-aegisgrid_dev}@postgres:5432/aegisgrid
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: aegisgrid
+      POSTGRES_USER: aegisgrid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegisgrid_dev}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
+      CORS_ORIGINS: http://localhost:3000
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+    restart: unless-stopped
+  worker:
+    build: ./services/api
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://aegisgrid:${POSTGRES_PASSWORD:-aegisgrid_dev}@postgres:5432/aegisgrid
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: aegisgrid
+      POSTGRES_USER: aegisgrid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegisgrid_dev}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aegisgrid
+      POSTGRES_USER: aegisgrid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegisgrid_dev}
+    volumes: [aegisgrid-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegisgrid -d aegisgrid"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-aegisgrid}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
+    ports: ["15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  aegisgrid-db:
