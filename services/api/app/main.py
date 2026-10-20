@@ -705,6 +705,7 @@ async def snapshot_start(body: EventAction):
     initiator = body.process_id if body.process_id in lab["processes"] else "P1"
     for proc in lab["processes"].values():
         proc.update({"recorded": False, "snapshot_state": None, "snapshot_sent_messages": [], "snapshot_received_messages": []})
+    lab["messages"] = {}
     for channel in lab["channels"]:
         channel["recording"] = False
         channel["snapshot_messages"] = []
