@@ -440,21 +440,17 @@ def forensics_causality(event_a: str, event_b: str, limit: int = 200):
             if target not in seen:
                 seen.add(target)
                 queue.append((target,path+[edge]))
-    reverse=defaultdict(list)
-    for edge in edges:
-        reverse[edge["to"]].append(edge)
     queue=deque([(event_b,[])])
     seen={event_b}
     while queue:
         current,path=queue.popleft()
         if current==event_a:
-            reverse_path=list(reversed(path))
-            return {"relation":"B_BEFORE_A","path":[event_b]+[edge["from"] for edge in path],"edges":reverse_path}
-        for edge in reverse[current]:
-            source=edge["from"]
-            if source not in seen:
-                seen.add(source)
-                queue.append((source,path+[edge]))
+            return {"relation":"B_BEFORE_A","path":[event_b]+[edge["to"] for edge in path],"edges":path}
+        for edge in outgoing[current]:
+            target=edge["to"]
+            if target not in seen:
+                seen.add(target)
+                queue.append((target,path+[edge]))
     return {"relation":"NO_CAUSAL_PATH_ESTABLISHED","path":[],"edges":[],"caveat":"Missing logs or process identifiers may prevent reconstruction; lack of a path is not proof of concurrency."}
 
 @app.get("/api/events")
