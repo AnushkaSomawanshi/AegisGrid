@@ -584,28 +584,114 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         return trace, {"algorithm":"Vector clocks","send_receive_relation":vector_relation(message_vector, p2),
                        "P2_vs_P3":vector_relation(p2, p3),"execution_mode":"simulation"}
     if lab_id == "election":
-        node_ids = parameters.get("node_ids", [1, 2, 3, 4, 5])
-        failed_raw = parameters.get("failed_node", 4)
-        if not isinstance(node_ids, list) or not node_ids or len(node_ids) > 50 or any(not isinstance(n, int) for n in node_ids):
-            raise HTTPException(422, "node_ids must be a non-empty list of up to 50 integer IDs")
-        if len(set(node_ids)) != len(node_ids):
-            raise HTTPException(422, "node_ids must be unique")
-        failed_id = int(failed_raw) if str(failed_raw).isdigit() else failed_raw
-        alive = sorted([n for n in node_ids if n != failed_id])
-        trace = [{"step":1,"event":"heartbeat.missed","node":str(failed_id),"state":"suspected"}]
-        lower = [n for n in alive if isinstance(n, int) and isinstance(failed_id, int) and n < failed_id]
-        candidate = max(lower) if lower else (max(alive) if alive else None)
-        winner = max(alive) if alive else None
-        if candidate is not None:
-            trace.append({"step":2,"event":"election.started","node":candidate,"detail":"candidate detects coordinator failure"})
-            higher = [n for n in alive if isinstance(n, int) and n > candidate]
-            for offset, node in enumerate(higher):
-                trace.append({"step":len(trace)+1,"event":"election.message","from":candidate,"to":node,"kind":"ELECTION"})
-                trace.append({"step":len(trace)+1,"event":"election.ok","from":node,"to":candidate,"kind":"OK"})
-        if winner is not None:
-            trace.append({"step":len(trace)+1,"event":"coordinator.announced","node":winner,"kind":"COORDINATOR"})
-        return trace, {"algorithm":"Bully election model","failed_node":failed_id,"alive_nodes":alive,
-                       "elected_coordinator":winner,"execution_mode":"simulation"}
+        scenario = parameters.get("scenario", "coordinator-failure")
+        presets = {
+            "coordinator-failure": ([5], 2, 5),
+            "lowest-initiator": ([5], 1, 5),
+            "multiple-failures": ([4, 5], 2, 5),
+            "coordinator-recovery": ([], 5, 4),
+        }
+        # Preserve compatibility with the original workbench's failed_node/node_ids payload.
+        legacy_ids = parameters.get("node_ids", [1, 2, 3, 4, 5])
+        legacy_failed = parameters.get("failed_node")
+        if scenario not in presets and scenario.startswith("acceptance-"):
+            scenario = "coordinator-failure"
+        if scenario not in presets:
+            raise HTTPException(422, "unknown election scenario")
+        default_failed, default_initiator, old_leader = presets[scenario]
+        failed = parameters.get("failed_nodes", ([legacy_failed] if legacy_failed is not None else default_failed))
+        initiator = parameters.get("initiator", default_initiator)
+        if legacy_failed is not None and "failed_nodes" not in parameters and "initiator" not in parameters:
+            active_legacy = [n for n in legacy_ids if n not in failed]
+            if not active_legacy:
+                raise HTTPException(422, "at least one process must be active")
+            initiator = max(active_legacy[:-1], default=active_legacy[0])
+            old_leader = max(legacy_ids)
+        if (not isinstance(failed, list) or any(type(n) is not int or n not in range(1, 6) for n in failed)
+                or len(set(failed)) != len(failed) or type(initiator) is not int or initiator not in range(1, 6)):
+            raise HTTPException(422, "failed_nodes and initiator must reference unique P1-P5 IDs")
+        alive = [n for n in range(1, 6) if n not in failed]
+        if initiator not in alive:
+            raise HTTPException(422, "initiator must be active")
+        if not alive:
+            raise HTTPException(422, "at least one process must be active")
+        nodes = {n: {"id":n, "alive":n in alive, "state":"FOLLOWER" if n in alive else "FAILED",
+                     "leader_view":old_leader} for n in range(1, 6)}
+        messages: list[dict[str, Any]] = []
+        trace: list[dict[str, Any]] = []
+        def emit(event: str, node: int | None = None, target: int | None = None,
+                 message_type: str | None = None, detail: str = "", **changes: Any) -> None:
+            if node is not None and changes:
+                nodes[node].update(changes)
+            record: dict[str, Any] = {"step":len(trace)+1, "event":event, "kind":("COORDINATOR" if event == "coordinator.elected" else message_type),
+                "node":node, "target":target, "message_type":message_type, "detail":detail,
+                "nodes":{str(k):dict(v) for k,v in nodes.items()},
+                "message_count":len(messages), "execution_mode":"simulation"}
+            if message_type:
+                msg = {"id":f"M{len(messages)+1}", "type":message_type, "sender":node,
+                       "receiver":target, "step":len(trace)+1}
+                messages.append(msg)
+                record["message_id"] = msg["id"]
+            trace.append(record)
+        if scenario == "coordinator-recovery":
+            emit("node.recovered", 5, detail="P5 returns and initiates an election",
+                 alive=True, state="FOLLOWER", leader_view=4)
+        else:
+            for n in failed:
+                emit("node.failed", n, detail=f"P{n} is unavailable", alive=False, state="FAILED")
+            emit("heartbeat.timeout", initiator, target=old_leader,
+                 detail=f"P{initiator} detects coordinator P{old_leader} is unavailable")
+        # A higher active process replies OK and starts its own election.
+        # Each active participant is scheduled at most once in this deterministic run.
+        pending = [initiator]
+        started: set[int] = set()
+        while pending:
+            current = pending.pop(0)
+            if current in started:
+                continue
+            started.add(current)
+            emit("election.started", current, detail=f"P{current} starts an election", state="ELECTION_RUNNING")
+            higher = [n for n in range(current+1, 6)]
+            responders = []
+            for target in higher:
+                emit("election.sent", current, target, "ELECTION",
+                     f"P{current} asks higher-priority P{target} to take over")
+                if target in alive:
+                    emit("ok.received", target, current, "OK",
+                         f"P{target} acknowledges election request from P{current}")
+                    responders.append(target)
+                    if target not in started and target not in pending:
+                        pending.append(target)
+                else:
+                    emit("election.timeout", current, target,
+                         detail=f"P{target} did not respond within simulated timeout")
+            if responders:
+                emit("coordinator.wait", current,
+                     detail=f"Higher active nodes {responders} responded; P{current} waits",
+                     state="WAITING_FOR_COORDINATOR")
+            else:
+                emit("election.no_higher_response", current,
+                     detail=f"No higher process responded to P{current}")
+        winner = max(alive)
+        emit("coordinator.elected", winner, detail=f"P{winner} is the highest active process",
+             state="COORDINATOR", leader_view=winner)
+        for target in alive:
+            if target == winner:
+                continue
+            emit("coordinator.sent", winner, target, "COORDINATOR",
+                 f"P{winner} announces its coordinator role to P{target}")
+            emit("coordinator.accepted", target, winner,
+                 detail=f"P{target} accepts P{winner} as coordinator",
+                 state="FOLLOWER", leader_view=winner)
+        checks = {"highest_active_wins":winner==max(alive),
+                  "failed_nodes_never_send":all(m["sender"] not in failed for m in messages),
+                  "election_only_to_higher_ids":all(m["sender"] < m["receiver"] for m in messages if m["type"]=="ELECTION"),
+                  "active_nodes_agree":all(nodes[n]["leader_view"]==winner for n in alive),
+                  "exactly_one_coordinator":sum(nodes[n]["state"]=="COORDINATOR" for n in alive)==1}
+        return trace, {"algorithm":"Bully leader election", "scenario":scenario,
+            "initiator":initiator, "previous_coordinator":old_leader, "failed_nodes":failed,
+            "active_nodes":alive, "elected_coordinator":winner, "final_nodes":nodes,
+            "messages":messages, "consistency_checks":checks, "execution_mode":"simulation"}
     if lab_id == "mutex":
         requests = parameters.get("requests", [
             {"process":"P1","timestamp":1,"process_id":1},
@@ -761,7 +847,7 @@ def list_reservations(db: Session = Depends(get_db)):
 
 @router.post("/experiments", status_code=201)
 def create_experiment(body: ExperimentCreate, db: Session = Depends(get_db)):
-    parameters = {**body.parameters, "scenario": body.scenario} if body.lab_id in {"snapshot", "vector"} else body.parameters
+    parameters = {**body.parameters, "scenario": body.scenario} if body.lab_id in {"snapshot", "vector", "election"} else body.parameters
     trace, result = _trace_for(body.lab_id, parameters)
     row = ExperimentRun(lab_id=body.lab_id, scenario=body.scenario, parameters=json.dumps(parameters),
                         trace=json.dumps(trace), result=json.dumps(result), status="ready", current_step=0)

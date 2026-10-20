@@ -168,16 +168,35 @@ The result includes final process vectors, message IDs, sender/receiver, send-ev
 
 This is a deterministic teaching simulation. Process names are logical identities and do not claim to be deployed AegisGrid service processes. Vector timestamps are not wall-clock timestamps, and the page does not instrument live network messages or runtime state. The first version uses a fixed three-process component order; dynamic membership and vector compression are outside its scope.
 
-## 5. Leader election — Bully algorithm model
+## 5. Leader election — detailed Bully Algorithm Execution Studio
 
-### Concept
-In a simplified Bully algorithm, a process that suspects the coordinator starts an election. Processes with higher IDs can respond and start their own elections. The highest-ID live process eventually announces itself as coordinator, assuming membership and failure detection behave as expected.
+The dedicated leader-election page is an operations dashboard, not a theory article. It shows five process cards (P1 API Gateway, P2 Incident Service, P3 Resource Coordinator, P4 Inventory Service, P5 Cluster Coordinator), node availability, current per-node coordinator view, election state, a message ledger, step-by-step event timeline, message inspector, progress metrics, consistency checks and JSON export.
 
-### Demonstration
-The model marks node 4 unavailable and shows node 5 becoming leader because it has the highest live identifier.
+### Default demonstration: P5 fails and P4 wins
 
-### Discussion
-This is not a production leader-election protocol. A live service can appear failed during a network partition, and naive elections can cause split-brain behavior if there is no quorum/fencing mechanism. The lab doesn't kill containers or change a real cluster leader.
+1. P5 becomes unavailable and P2 detects a simulated coordinator heartbeat timeout.
+2. P2 starts an election, sends ELECTION to higher-ID nodes P3, P4 and P5.
+3. Active P3 and P4 respond OK; failed P5 does not respond and produces a timeout event.
+4. P3 and P4 initiate their own higher-priority elections. P4 receives no response from P5.
+5. P4 becomes coordinator and sends COORDINATOR messages to P1, P2 and P3.
+6. Recipients update their own coordinator views on receiving the announcement. The final state has exactly one coordinator and all active nodes agree on P4.
+
+Every ELECTION, OK, COORDINATOR, simulated timeout, node transition and leader-view change is recorded in the persisted trace. A higher node that responds starts its own election; a lower node receiving OK waits rather than claiming leadership. Failed processes never send messages.
+
+### Presets
+
+- Coordinator failure: P5 failed, P2 initiates, P4 wins.
+- Lowest initiator: P5 failed, P1 initiates, P4 wins.
+- Multiple failures: P4 and P5 failed, P2 initiates, P3 wins.
+- Coordinator recovery: P5 rejoins while P4 is coordinator; P5 runs an election and announces itself.
+
+### Controls and evidence
+
+Use Start election, Next event, Run all, Pause, Resume, Reset and Export evidence. The page reconstructs current node states from executed events only; selecting a pending event opens its inspector but does not apply its state changes. The result includes message sender/receiver/type/step, per-event node snapshots, failed and active membership, initiator, elected coordinator, and checks for highest-active winner, no sends from failed nodes, higher-only ELECTION requests, agreement and exactly one coordinator.
+
+### Scope and limitations
+
+This is a deterministic five-node educational simulation, not an instrumented live election. Timeouts are logical scheduled events, not elapsed wall-clock timers. It does not implement unreliable transport, network partitions, quorum, fencing or production-grade split-brain prevention. Real distributed deployments must not infer safety from this simplified model.
 
 ## 6. Distributed mutual exclusion — Ricart–Agrawala model
 

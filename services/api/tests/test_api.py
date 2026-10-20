@@ -418,3 +418,51 @@ def test_vector_clock_preset_scenarios_are_distinct():
     assert len(concurrent['trace']) == 5
     assert any(c['relation'] == 'concurrent' and {c['a'], c['b']} == {'E4','E5'}
                for c in concurrent['result']['event_comparisons'])
+
+
+def test_bully_election_default_converges_on_highest_active_node():
+    response = client.post("/api/experiments", json={"lab_id":"election","scenario":"coordinator-failure"})
+    assert response.status_code == 201
+    run = response.json()["run"]
+    result = run["result"]
+    assert result["elected_coordinator"] == 4
+    assert result["failed_nodes"] == [5]
+    assert all(result["consistency_checks"].values())
+    assert any(e["event"] == "election.timeout" and e["target"] == 5 for e in run["trace"])
+    assert any(e["event"] == "ok.received" for e in run["trace"])
+    assert any(e["event"] == "coordinator.accepted" for e in run["trace"])
+
+
+def test_bully_election_presets_and_recovery():
+    expected = {"coordinator-failure":4,"lowest-initiator":4,"multiple-failures":3,"coordinator-recovery":5}
+    for scenario, winner in expected.items():
+        response = client.post("/api/experiments", json={"lab_id":"election","scenario":scenario})
+        assert response.status_code == 201
+        run = response.json()["run"]
+        assert run["result"]["elected_coordinator"] == winner
+        assert all(run["result"]["consistency_checks"].values())
+        assert run["trace"][-1]["nodes"][str(winner)]["state"] == "COORDINATOR"
+    recovered = client.post("/api/experiments",json={"lab_id":"election","scenario":"coordinator-recovery"}).json()["run"]
+    assert recovered["trace"][0]["event"] == "node.recovered"
+
+
+def test_bully_election_rejects_invalid_initiator_and_nodes():
+    for parameters in ({"initiator":5},{"failed_nodes":[5,5]},{"initiator":0},{"failed_nodes":[6]}):
+        response = client.post("/api/experiments", json={"lab_id":"election","scenario":"coordinator-failure","parameters":parameters})
+        assert response.status_code == 422
+
+
+def test_bully_election_step_reset_replay():
+    response = client.post("/api/experiments",json={"lab_id":"election","scenario":"multiple-failures"})
+    assert response.status_code == 201
+    run = response.json()["run"]
+    run_id = run["id"]
+    first = client.post(f"/api/experiments/{run_id}/step")
+    assert first.status_code == 200
+    assert first.json()["run"]["current_step"] == 1
+    reset = client.post(f"/api/experiments/{run_id}/reset")
+    assert reset.status_code == 200
+    assert reset.json()["run"]["current_step"] == 0
+    again = client.post(f"/api/experiments/{run_id}/step")
+    assert again.status_code == 200
+    assert again.json()["event"] == first.json()["event"]
