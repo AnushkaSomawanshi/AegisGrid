@@ -45,6 +45,27 @@ class EventRecord(Base):
     payload: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+
+class OutboxRecord(Base):
+    __tablename__ = "event_outbox"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_record_id: Mapped[int] = mapped_column(ForeignKey("event_records.id"), unique=True, index=True)
+    event_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), index=True)
+    payload: Mapped[str] = mapped_column(Text, default="{}")
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class ProcessedMessage(Base):
+    __tablename__ = "processed_messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(80))
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
 class Resource(Base):
     __tablename__ = "resources"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
