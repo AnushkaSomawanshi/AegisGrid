@@ -623,8 +623,8 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                  message_type: str | None = None, detail: str = "", **changes: Any) -> None:
             if node is not None and changes:
                 nodes[node].update(changes)
-            record: dict[str, Any] = {"step":len(trace)+1, "event":event, "node":node,
-                "target":target, "message_type":message_type, "detail":detail,
+            record: dict[str, Any] = {"step":len(trace)+1, "event":event, "kind":("COORDINATOR" if event == "coordinator.elected" else message_type),
+                "node":node, "target":target, "message_type":message_type, "detail":detail,
                 "nodes":{str(k):dict(v) for k,v in nodes.items()},
                 "message_count":len(messages), "execution_mode":"simulation"}
             if message_type:
