@@ -222,6 +222,7 @@ The current implementation branch adds persisted resource inventory/reservations
 - [Docker & Kubernetes Demonstration Runbook](docs/DOCKER_KUBERNETES_DEMONSTRATION.md) — full run sequence for Compose, incident/resource workflow, RabbitMQ worker, Kubernetes rollout/scaling, Pod recovery, and evidence capture.
 - [Scalability and Resilience Experiments](docs/EXPERIMENTS.md) — controlled experiments and measurement requirements.
 - [HTTP Load Probe](scripts/http_load_probe.py) — real HTTP latency/throughput samples with JSON report output.
+- [Kubernetes Recovery Probe](scripts/k8s_recovery_probe.py) — guarded Pod replacement readiness timing, requires explicit `--confirm` and is restricted to the `aegisgrid` namespace.
 - [API OpenAPI](http://localhost:8000/docs) after starting the stack.
 
 ### Added API routes
