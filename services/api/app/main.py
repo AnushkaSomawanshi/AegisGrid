@@ -1,4 +1,5 @@
 """AegisGrid API gateway and concept lab endpoints."""
+import asyncio
 import json
 import os
 from datetime import datetime, timezone
@@ -8,15 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from .db import init_db, get_db, Incident, EventRecord
+from .db import init_db, get_db, Incident, EventRecord, OutboxRecord
 from .broker import publish_event
 from . import labs
+from .advanced import router as advanced_router
 
 app = FastAPI(
     title="AegisGrid API",
     description="Distributed emergency-response coordination and educational distributed-systems labs.",
     version="1.0.0",
 )
+app.include_router(advanced_router)
+
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -39,14 +43,32 @@ class IncidentUpdate(BaseModel):
 
 
 def record_event(db: Session, event_type: str, source: str, payload: dict[str, Any]) -> dict:
+    # Persist the event and its outbox envelope in the same SQL transaction.
     event = EventRecord(event_type=event_type, source=source, payload=json.dumps(payload, ensure_ascii=False))
     db.add(event)
+    db.flush()
+    correlation_id = str(payload.get("correlation_id") or payload.get("incident_id") or payload.get("id") or event.id)
+    envelope = {**payload, "event_id": str(event.id), "correlation_id": correlation_id,
+                "causation_id": payload.get("causation_id")}
+    event.payload = json.dumps(envelope, ensure_ascii=False)
+    outbox = OutboxRecord(event_record_id=event.id, event_id=str(event.id), event_type=event_type,
+                          payload=json.dumps(envelope, ensure_ascii=False), status="pending")
+    db.add(outbox)
     db.commit()
     db.refresh(event)
-    broker_result = publish_event(event_type, {"event_id": event.id, **payload}, source)
+    db.refresh(outbox)
+    # Fast-path publication reduces latency; a failed attempt remains in the outbox for retry.
+    broker_result = publish_event(event_type, envelope, source)
+    outbox.attempts += 1
+    outbox.status = "published" if broker_result.get("delivery") == "published" else "pending"
+    outbox.last_error = broker_result.get("detail", "") or ""
+    if outbox.status == "published":
+        outbox.published_at = datetime.now(timezone.utc)
+    db.commit()
     return {"id": event.id, "event_type": event.event_type, "source": source, "payload": payload,
             "created_at": event.created_at.isoformat(), "broker": broker_result.get("delivery", "not-configured"),
-            "broker_detail": broker_result.get("detail")}
+            "broker_detail": broker_result.get("detail"), "outbox_id": outbox.id,
+            "outbox_status": outbox.status}
 
 
 def incident_dict(item: Incident) -> dict:
@@ -145,6 +167,40 @@ def events(limit: int = 50, db: Session = Depends(get_db)):
     return {"items":items,"count":len(items)}
 
 
+
+@app.get("/api/outbox")
+def list_outbox(limit: int = 50, db: Session = Depends(get_db)):
+    if limit < 1 or limit > 200:
+        raise HTTPException(400, "limit must be between 1 and 200")
+    rows = db.query(OutboxRecord).order_by(desc(OutboxRecord.id)).limit(limit).all()
+    return {"items":[{"id":r.id,"event_record_id":r.event_record_id,"event_id":r.event_id,
+        "event_type":r.event_type,"status":r.status,"attempts":r.attempts,"last_error":r.last_error,
+        "created_at":r.created_at.isoformat(),"published_at":r.published_at.isoformat() if r.published_at else None}
+        for r in rows],"count":len(rows)}
+
+@app.post("/api/outbox/{outbox_id}/retry")
+def retry_outbox(outbox_id: int, db: Session = Depends(get_db)):
+    row = db.get(OutboxRecord, outbox_id)
+    if row is None:
+        raise HTTPException(404, "outbox record not found")
+    if row.status == "published":
+        return {"id":row.id,"status":row.status,"attempts":row.attempts,"detail":"already published"}
+    try:
+        payload = json.loads(row.payload)
+    except json.JSONDecodeError:
+        raise HTTPException(500, "outbox payload is invalid JSON")
+    result = publish_event(row.event_type, payload, "outbox-retry")
+    row.attempts += 1
+    row.last_error = result.get("detail", "") or ""
+    if result.get("delivery") == "published":
+        row.status = "published"
+        row.published_at = datetime.now(timezone.utc)
+    else:
+        row.status = "pending"
+    db.commit()
+    return {"id":row.id,"status":row.status,"attempts":row.attempts,"delivery":result.get("delivery"),
+            "detail":row.last_error}
+
 @app.post("/api/events/demo")
 def demo_event(db: Session = Depends(get_db)):
     return record_event(db, "dispatch.demo", "dashboard", {"message":"Demonstration event emitted from the command centre","sequence":db.query(EventRecord).count()+1})
@@ -176,6 +232,34 @@ def get_lab(lab_id: str):
         raise HTTPException(404, "unknown lab; see GET /api/concepts")
     return handler()
 
+
+
+@app.websocket("/ws/telemetry")
+async def websocket_telemetry(websocket: WebSocket):
+    """Real WebSocket transport carrying explicitly synthetic, sequenced demo telemetry."""
+    await websocket.accept()
+    sequence = 0
+    try:
+        await websocket.send_json({"type":"connected","mode":"synthetic-demo","message":"Telemetry stream connected"})
+        while True:
+            frame = {"type":"telemetry","mode":"synthetic-demo","sequence":sequence,
+                     "at":datetime.now(timezone.utc).isoformat(),
+                     "load_pct":round(35 + ((sequence * 17) % 47), 1),
+                     "queue_depth":(sequence * 7) % 23,
+                     "node":"worker-demo-1"}
+            await websocket.send_json(frame)
+            sequence += 1
+            try:
+                command = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                if command == "close":
+                    await websocket.close(code=1000)
+                    return
+                if command == "ping":
+                    await websocket.send_json({"type":"pong","at":datetime.now(timezone.utc).isoformat()})
+            except asyncio.TimeoutError:
+                pass
+    except WebSocketDisconnect:
+        return
 
 @app.websocket("/ws/events")
 async def websocket_events(websocket: WebSocket):

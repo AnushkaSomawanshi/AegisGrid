@@ -1,0 +1,26 @@
+# Optional autoscaling overlay. Requires metrics-server and a cluster that supports autoscaling/v2.
+# Apply after app-stack.yaml. The HPA controls only stateless API replicas.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegisgrid-api
+  namespace: aegisgrid
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aegisgrid-api
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 120

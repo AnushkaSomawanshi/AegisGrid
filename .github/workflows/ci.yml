@@ -32,3 +32,61 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install YAML parser
+        run: pip install pyyaml
+      - name: Validate Compose and Kubernetes manifest structure
+        run: python scripts/validate_manifests.py
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start complete Compose stack
+        run: docker compose up -d --build
+      - name: Wait for API readiness
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health/ready; then
+              echo "API readiness succeeded on attempt $attempt"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --tail=150 api postgres rabbitmq
+          exit 1
+      - name: Smoke-test dashboard, resources and experiment APIs
+        run: |
+          curl -fsS http://localhost:3000/ >/dev/null
+          curl -fsS -X POST http://localhost:8000/api/resources/demo-seed >/tmp/aegis-resources.json
+          curl -fsS http://localhost:8000/api/resources | python -c "import json,sys; assert json.load(sys.stdin)['count'] >= 4"
+          curl -fsS -X POST http://localhost:8000/api/experiments -H 'Content-Type: application/json' -d '{"lab_id":"physical-clock","scenario":"compose-smoke","parameters":{"offsets":[-100,0,100]}}' | python -c "import json,sys; assert json.load(sys.stdin)['run']['result']['mean_offset_ms'] == 0"
+      - name: Verify API to RabbitMQ to worker flow
+        run: |
+          curl -fsS -X POST http://localhost:8000/api/events/demo >/tmp/aegis-event.json
+          for attempt in $(seq 1 40); do
+            if curl -fsS 'http://localhost:8000/api/events?limit=100' | grep -q 'worker.processed'; then
+              echo "Worker processing record observed on attempt $attempt"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs --tail=200 api worker outbox-dispatcher rabbitmq
+          exit 1
+      - name: Collect runtime diagnostics
+        if: always()
+        run: |
+          docker compose ps
+          docker compose logs --tail=100 api worker outbox-dispatcher rabbitmq || true
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down -v

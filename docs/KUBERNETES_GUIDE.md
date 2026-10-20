@@ -42,7 +42,7 @@ kubectl get deployments,pods,services,pvc -n aegisgrid
 kubectl rollout status deployment/aegisgrid-api -n aegisgrid
 kubectl rollout status deployment/aegisgrid-frontend -n aegisgrid
 kubectl logs deployment/aegisgrid-api -n aegisgrid --tail=100
-kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100
+kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100\nkubectl logs deployment/aegisgrid-outbox-dispatcher -n aegisgrid --tail=100
 ```
 
 The frontend NodePort is 30080. The API Service is internal on port 8000. Accessing the dashboard should use the node address and NodePort supported by your local cluster.
@@ -79,3 +79,58 @@ Record the deletion time, replacement Pod creation time, readiness time, and a s
 - Review all manifests with `kubectl diff -f infrastructure/kubernetes/` before changing a running environment.
 
 The Kubernetes runtime panel documents commands; it does not remotely execute kubectl or invent cluster telemetry.
+
+
+## Detailed scaling and recovery demonstration
+
+The main manifest defines the frontend, API, worker, PostgreSQL PVC and RabbitMQ services. Run the full sequence in [the Docker/Kubernetes Demonstration Runbook](DOCKER_KUBERNETES_DEMONSTRATION.md) so the environment and evidence are consistent.
+
+### Observe actual workload state
+
+```bash
+kubectl get deploy,pods,svc,pvc -n aegisgrid -o wide
+kubectl get events -n aegisgrid --sort-by=.lastTimestamp
+kubectl logs deployment/aegisgrid-api -n aegisgrid --tail=100
+kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100
+```
+
+### Scale manually and compare a fixed workload
+
+```bash
+kubectl scale deployment/aegisgrid-api --replicas=1 -n aegisgrid
+kubectl rollout status deployment/aegisgrid-api -n aegisgrid
+python scripts/http_load_probe.py --url http://localhost:8000/health/live --requests 300 --concurrency 20 --output artifacts/k8s-api-r1.json
+
+kubectl scale deployment/aegisgrid-api --replicas=3 -n aegisgrid
+kubectl rollout status deployment/aegisgrid-api -n aegisgrid
+python scripts/http_load_probe.py --url http://localhost:8000/health/live --requests 300 --concurrency 20 --output artifacts/k8s-api-r3.json
+```
+
+Use port-forwarding for the probe if it is not already available locally:
+```bash
+kubectl port-forward service/api 8000:8000 -n aegisgrid
+```
+
+These outputs are real client-observed request samples. Repeat each run at least three times, note the machine/cluster/commit, and remember that the health endpoint is not a representative incident workload. Use a fixed incident or event workload for a stronger application benchmark.
+
+### Optional API HPA
+
+`infrastructure/kubernetes/api-hpa.yaml` defines a CPU-based HorizontalPodAutoscaler for the stateless API. It requires Metrics Server. Apply it only after the base stack is ready:
+
+```bash
+kubectl apply -f infrastructure/kubernetes/api-hpa.yaml
+kubectl get hpa -n aegisgrid -w
+kubectl describe hpa aegisgrid-api -n aegisgrid
+```
+
+Do not claim autoscaling worked merely because the HPA object exists. Record actual replica changes under load. The worker is scaled manually because CPU is not a reliable proxy for RabbitMQ backlog or processing lag in this basic setup.
+
+### Self-healing trial
+
+In a disposable cluster, record timestamps and delete one stateless API Pod:
+```bash
+kubectl get pods -n aegisgrid -l app=aegisgrid-api -o wide
+kubectl delete pod -n aegisgrid -l app=aegisgrid-api --wait=false
+kubectl get pods -n aegisgrid -l app=aegisgrid-api -w
+```
+Record the failure injection time, replacement readiness, failed requests, and Pod events. Repeat three times and report the median/range. Pod replacement does not guarantee zero downtime.

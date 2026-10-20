@@ -48,6 +48,25 @@ services:
       postgres: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     restart: unless-stopped
+  outbox-dispatcher:
+    build: ./services/api
+    command: ["python", "-m", "app.outbox_dispatcher"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://aegisgrid:${POSTGRES_PASSWORD:-aegisgrid_dev}@postgres:5432/aegisgrid
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: aegisgrid
+      POSTGRES_USER: aegisgrid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegisgrid_dev}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
+      OUTBOX_POLL_SECONDS: "3"
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
   postgres:
     image: postgres:16-alpine
     environment:

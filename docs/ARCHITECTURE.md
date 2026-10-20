@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-AegisGrid is an academic distributed emergency-response coordination application. Incident intake and status transitions create persistent event records. An independent worker consumes asynchronously published messages. A concept laboratory exposes distributed-systems protocols as deterministic teaching models.
+AegisGrid is an academic distributed emergency-response coordination application. Incident intake and status transitions create persistent event records. An independent outbox dispatcher retries pending envelopes and an independent worker consumes asynchronously published messages. Event and outbox records commit in one SQL transaction; stable event IDs are deduplicated by the consumer. A concept laboratory exposes distributed-systems protocols as deterministic teaching models.
 
 The platform demonstrates containerization, service boundaries, persistence, synchronous calls, asynchronous event delivery, scaling and recovery workflows. It is not a real emergency-dispatch system.
 

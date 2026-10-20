@@ -148,3 +148,18 @@ Do not label the project complete until every requirement has:
 ## Deployment caveat
 
 The Kubernetes manifests and Docker Compose file are configuration artifacts. Their existence is not proof that a deployment ran successfully. The actual runtime integration, cluster access, workload scaling and failure recovery must be exercised in the user's development environment. Any performance figures must come from those measured runs, not from the UI illustration.
+
+
+## Implementation progress — feature branch increment (2026-10-20)
+
+The following items have since been added on branch `feature/aegisgrid-complete-demonstrations` and are awaiting CI/review via PR #4:
+- SQL persistence models for resources, reservations, experiment runs, transactional outbox and unique processed-message IDs.
+- Resource list/create/idempotent demo seed endpoints; reservation, conflict response and release endpoint.
+- A conditional availability update for reservation to reduce double-reservation races on PostgreSQL.
+- Persisted experiment runs with parameter/result/trace payload, step, reset, pause, resume, and labelled simulated fault insertion.
+- Beacon timeout/missed-heartbeat simulation and chronological incident-forensics endpoint with an explicit causality limitation.
+- Transactional event + outbox commit, independent polling outbox dispatcher, outbox inspection/manual retry endpoints, RabbitMQ publisher confirms, and worker deduplication by stable event ID.
+- New frontend pages: interactive OpenStreetMap resource markers, resource registration/reservation/release, experiment trace workbench, and outbox/worker trace console.
+- Real HTTP load probe script, optional API HPA manifest, and detailed Docker/Kubernetes runbook.
+
+This is meaningful progress but **does not close the whole acceptance checklist**. Remaining major work includes full algorithm state machines/invariants, bounded retry/backoff and a poison-message dead-letter policy, causal IDs/graph, real telemetry stream, live Docker/Kubernetes runtime adapter, measured end-to-end load/fault tests, and running the stack/cluster in an actual development environment. Current map markers are seeded example coordinates and do not represent live GPS.
