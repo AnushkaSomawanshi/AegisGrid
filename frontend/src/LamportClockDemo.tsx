@@ -58,7 +58,6 @@ export function LamportClockDemo({onBack}:Props){
  const current=run?.trace.find(e=>e.event_id===selected)||executed[executed.length-1]||run?.trace[0]||null;
  const processIds=run?Array.from(new Set(run.trace.map(e=>e.process))):["P1","P2","P3"];
  const executedIds=new Set(executed.map(e=>e.event_id));
- const eventMap=new Map((run?.trace||[]).map(e=>[e.event_id,e]));
  const edges=(run?.result.causal_edges||[]) as {from:string;to:string;relation:string}[];
  const setPresetValue=(key:string)=>{setPreset(key);setOperationsText(JSON.stringify(presets[key].operations,null,2));setScenario(key==="dispatch"?"incident-dispatch-causality":key+"-scenario");setRun(null);setError("");setNotice("");};
  async function refreshHistory(){try{const out=await call<{items:Run[]}>("/experiments?limit=30");setHistory(out.items.filter(item=>item.lab_id==="lamport"));}catch(e){setError(e instanceof Error?e.message:"Could not load experiment history");}}
