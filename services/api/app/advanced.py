@@ -695,11 +695,11 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
     if lab_id == "mutex":
         scenario = parameters.get("scenario", "three-way-competition")
         presets = {
-            "sequential-updates": [(1, 1), (2, 2), (3, 3)],
-            "simultaneous-requests": [(1, 1), (1, 2), (1, 3)],
-            "deferred-reply": [(1, 1), (2, 2), (3, 3)],
-            "three-way-competition": [(1, 1), (1, 2), (2, 3)],
-            "delayed-delivery": [(1, 1), (2, 2), (2, 3)],
+            "sequential-updates": [{"timestamp":1,"process_id":1},{"timestamp":2,"process_id":2},{"timestamp":3,"process_id":3}],
+            "simultaneous-requests": [{"timestamp":1,"process_id":1},{"timestamp":1,"process_id":2},{"timestamp":1,"process_id":3}],
+            "deferred-reply": [{"timestamp":1,"process_id":1},{"timestamp":2,"process_id":2},{"timestamp":3,"process_id":3}],
+            "three-way-competition": [{"timestamp":1,"process_id":1},{"timestamp":1,"process_id":2},{"timestamp":2,"process_id":3}],
+            "delayed-delivery": [{"timestamp":1,"process_id":1},{"timestamp":2,"process_id":2},{"timestamp":2,"process_id":3}],
         }
         if scenario not in presets:
             scenario = "three-way-competition"
