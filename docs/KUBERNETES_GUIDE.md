@@ -1,6 +1,6 @@
 # Kubernetes Guide
 
-The manifests in `infrastructure/kubernetes` describe the target local deployment. Review images, local image loading, storage and secret configuration before applying. These manifests have not been executed by GitHub's file-writing API.
+The manifests in `infrastructure/kubernetes` describe the target local deployment, including a separate Event Worker Deployment. Review images, local image loading, storage and secret configuration before applying. These manifests have not been executed by GitHub's file-writing API.
 
 ## Verify cluster
 
