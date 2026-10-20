@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Clock3, Database, MapPin, Network, Package, Play, Plus, Radio, RotateCcw, Save, ShieldCheck, StepForward, Workflow } from "lucide-react";
 import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import { BerkeleyClockDemo } from "./BerkeleyClockDemo";
 
 const API = (import.meta as ImportMeta & {env?: {VITE_API_URL?: string}}).env?.VITE_API_URL || "/api-proxy";
 async function call<T>(path:string, init?:RequestInit):Promise<T>{
@@ -165,6 +166,7 @@ export function ExperimentWorkbench(){
  async function reset(){if(!run)return;setBusy(true);try{const out=await call<{run:Run}>("/experiments/"+run.id+"/reset",{method:"POST"});setRun(out.run);setMessage("Run cursor reset to the first event; trace and parameters are preserved.");}catch(e){setError(e instanceof Error?e.message:"Reset failed");}finally{setBusy(false);}}
  async function loadRun(id:number){try{const out=await call<{run:Run}>("/experiments/"+id);setRun(out.run);setLab(out.run.lab_id);setMessage("Loaded persisted run #"+id+".");}catch(e){setError(e instanceof Error?e.message:"Unable to load run");}}
  const visibleTrace=run?run.trace.slice(0,run.current_step):[];
+ if(lab==="physical-clock") return <BerkeleyClockDemo onBack={()=>{setLab("lamport");setRun(null);setMessage("");}}/>;
  return <div className="advanced-page">
   <div className="page-intro"><div><div className="eyebrow">DISTRIBUTED SYSTEMS / EXECUTION WORKBENCH</div><h1>Experiment workbench</h1><p>Create a persisted run, execute it event-by-event, inspect state and results, and reopen recent runs. Algorithm traces are simulations unless explicitly marked runtime-verified.</p></div><div className="intro-actions"><span className="status-pill up"><i/> STEPWISE EXECUTION</span></div></div>
   <div className="connection-banner connection-demo"><span className="banner-icon"><Workflow size={17}/></span><div><b>Simulation/runtime boundary</b><span>Clock, election, mutex, snapshot, vector and beacon runs are educational models. Messaging and stream traces are workflow templates, not proof of broker delivery or live telemetry. Scaling metrics are not fabricated.</span></div><span className="banner-mode">LABELLED TRACE</span></div>
