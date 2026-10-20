@@ -146,10 +146,10 @@ export function MessagingConsole(){
 export function ExperimentWorkbench({initialLab="physical-clock"}:{initialLab?:string}){
  const [lab,setLab]=useState(initialLab);
  const [scenario,setScenario]=useState("baseline");
- const [offsets,setOffsets]=useState(sampleOffsets);
+ const [offsets]=useState(sampleOffsets);
  const [misses,setMisses]=useState(3);
- const [threshold,setThreshold]=useState(3);
- const [failedNode,setFailedNode]=useState(4);
+ const [threshold]=useState(3);
+ const [failedNode]=useState(4);
  const [mutexPattern,setMutexPattern]=useState("simultaneous-requests");
  const [mutexRequests,setMutexRequests]=useState([7,7,9]);
  const [hbInterval,setHbInterval]=useState(1000);
@@ -167,13 +167,11 @@ export function ExperimentWorkbench({initialLab="physical-clock"}:{initialLab?:s
  const [selectedEvent,setSelectedEvent]=useState<number|null>(null);
  const refresh=useCallback(async()=>{try{const out=await call<{items:Run[]}>("/experiments?limit=20");setHistory(out.items);}catch(e){setError(e instanceof Error?e.message:"Experiment history unavailable");}},[]);
  useEffect(()=>{void refresh();},[refresh]);
- const active=labOptions.find(x=>x.id===lab)||labOptions[0];
  const params=lab==="physical-clock"?{offsets}:lab==="beacon"?{missed_beats:misses,threshold,interval_ms:hbInterval,timeout_ms:hbTimeout,network_delay_ms:hbDelay,packet_loss_percent:hbPacketLoss,fault_mode:hbFault,recover:hbRecovery,node_id:hbTarget}:lab==="election"?{failed_node:failedNode}:lab==="mutex"?{scenario:mutexPattern,requests:mutexPattern==="tie-break"?[{timestamp:mutexRequests[0],process_id:1},{timestamp:mutexRequests[1],process_id:2}]:[{timestamp:mutexRequests[0],process_id:1},{timestamp:mutexRequests[1],process_id:2},{timestamp:mutexRequests[2],process_id:3}]}:{};
  async function create(){setBusy(true);setError("");setMessage("");setSelectedEvent(null);try{const out=await call<{run:Run}>("/experiments",{method:"POST",body:JSON.stringify({lab_id:lab,scenario,parameters:params})});setRun(out.run);setMessage("Run persisted. Advance one event at a time to inspect the protocol.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Unable to create experiment");}finally{setBusy(false);}}
  async function step(){if(!run)return;setBusy(true);setError("");try{const out=await call<{run:Run;event:TraceEvent|null}>("/experiments/"+run.id+"/step",{method:"POST"});setRun(out.run);setSelectedEvent(out.run.current_step>0?out.run.current_step-1:null);setMessage(out.event?"Processed "+out.event.event:"Trace complete.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Step failed");}finally{setBusy(false);}}
  async function runAll(){if(!run)return;setBusy(true);setError("");try{let current=run;let guard=0;while(current.current_step<current.trace.length&&current.status!=="paused"&&guard++<250){current=(await call<{run:Run}>("/experiments/"+current.id+"/step",{method:"POST"})).run;}setRun(current);setSelectedEvent(Math.max(0,current.current_step-1));setMessage("Execution advanced to "+current.current_step+" of "+current.trace.length+" events.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Run failed");}finally{setBusy(false);}}
  async function controlRun(action:"pause"|"resume"){if(!run)return;setBusy(true);setError("");try{const out=await call<{run:Run}>("/experiments/"+run.id+"/"+action,{method:"POST"});setRun(out.run);setMessage("Run "+action+"d.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Unable to change run state");}finally{setBusy(false);}}
- async function injectFailure(){if(!run)return;setBusy(true);setError("");try{const out=await call<{run:Run}>("/experiments/"+run.id+"/inject-failure",{method:"POST",body:JSON.stringify({fault_type:lab==="beacon"?"heartbeat-loss":"process-unavailable",target:lab==="lamport"?"P2":"node-2"})});setRun(out.run);setMessage("Fault event inserted into this simulated trace; no real process or container was stopped.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Fault injection failed");}finally{setBusy(false);}}
  async function reset(){if(!run)return;setBusy(true);setError("");try{const out=await call<{run:Run}>("/experiments/"+run.id+"/reset",{method:"POST"});setRun(out.run);setSelectedEvent(null);setMessage("Trace cursor reset. Configuration and recorded event sequence are preserved.");}catch(e){setError(e instanceof Error?e.message:"Reset failed");}finally{setBusy(false);}}
  async function loadRun(id:number){try{const out=await call<{run:Run}>("/experiments/"+id);setRun(out.run);setLab(out.run.lab_id);setSelectedEvent(null);setMessage("Loaded persisted run #"+id+".");}catch(e){setError(e instanceof Error?e.message:"Unable to load run");}}
  const visibleTrace=run?run.trace.slice(0,run.current_step):[];
