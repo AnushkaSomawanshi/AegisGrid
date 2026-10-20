@@ -31,9 +31,11 @@ def publish_event(event_type: str, payload: dict, source: str = "api") -> dict:
         connection = pika.BlockingConnection(params)
         channel = connection.channel()
         channel.queue_declare(queue="aegisgrid.events", durable=True)
+        channel.confirm_delivery()
         channel.basic_publish(
             exchange="",
             routing_key="aegisgrid.events",
+            mandatory=True,
             body=json.dumps(message),
             properties=pika.BasicProperties(delivery_mode=2, content_type="application/json"),
         )
