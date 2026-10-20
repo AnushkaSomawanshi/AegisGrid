@@ -34,6 +34,7 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   const [delayModel, setDelayModel] = useState(30);
   const [maxCorrection, setMaxCorrection] = useState(250);
   const [stage, setStage] = useState<Stage>("ready");
+  const [runTarget, setRunTarget] = useState<number | null>(null);
   const [trace, setTrace] = useState<TraceEvent[]>([]);
   const [selectedNode, setSelectedNode] = useState("n2");
   const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
@@ -41,7 +42,8 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   const [showSettings, setShowSettings] = useState(true);
   const [notice, setNotice] = useState("");
   const accepted = nodes.filter(n => n.available);
-  const estimate = accepted.length ? Math.round(accepted.reduce((sum, n) => sum + n.offset, 0) / accepted.length) : 0;
+  const currentMean = accepted.length ? Math.round(accepted.reduce((sum, n) => sum + n.offset, 0) / accepted.length) : 0;
+  const estimate = stage === "ready" || runTarget === null ? currentMean : runTarget;
   const readings = nodes.map(n => ({ ...n, target: estimate, requested: Math.max(-maxCorrection, Math.min(maxCorrection, estimate - n.offset)), corrected: stage === "apply" || stage === "verify" ? n.offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - n.offset)) : null }));
   const selected = readings.find(n => n.id === selectedNode) || readings[0];
   const activeEvent = trace.find(e => e.id === selectedEvent) || trace[trace.length - 1];
@@ -56,16 +58,14 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   ], [nodes, stage, estimate, maxCorrection]);
 
   function addEvent(event: Omit<TraceEvent, "id">) {
-    setTrace(previous => {
-      const next = [...previous, { ...event, id: previous.length + 1 }];
-      setSelectedEvent(next[next.length - 1].id);
-      return next;
-    });
+    const id = trace.length + 1;
+    setTrace(previous => [...previous, { ...event, id }]);
+    setSelectedEvent(id);
   }
   function reset(nextPreset: Preset = preset) {
     const values = presets[nextPreset].offsets;
     setNodes(initialNodes.map((n, i) => ({ ...n, offset: values[i], available: true })));
-    setPreset(nextPreset); setStage("ready"); setTrace([]); setSelectedEvent(null); setRunId(v => v + 1);
+    setPreset(nextPreset); setStage("ready"); setRunTarget(null); setTrace([]); setSelectedEvent(null); setRunId(v => v + 1);
     setNotice("Scenario reset. No clock corrections have been applied.");
   }
   function configurePreset(value: Preset) { reset(value); }
@@ -73,13 +73,13 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
     const nextRun = runId + 1;
     const events: Omit<TraceEvent, "id">[] = [{ stage: "collect", title: "Synchronization round opened", detail: "Coordinator created a new round and will poll each available node.", kind: "system", payload: { run: nextRun, participant_count: accepted.length, delay_model_ms: delayModel } }, ...nodes.map(n => ({ stage: "collect" as Stage, title: n.available ? "Clock reading received" : "Node timed out", detail: n.available ? n.label + " reported offset " + ms(n.offset) + "; configured node delay " + n.delay + " ms." : n.label + " did not respond and is excluded from this round.", node: n.id, kind: (n.available ? "message" : "warning") as TraceEvent["kind"], payload: { node_id: n.id, reported_offset_ms: n.offset, configured_delay_ms: n.delay, configured_delay_model_ms: delayModel, accepted: n.available } }))];
     const fullTrace = events.map((event, i) => ({ ...event, id: i + 1 }));
-    setTrace(fullTrace); setSelectedEvent(fullTrace[fullTrace.length - 1]?.id ?? null); setStage("collect"); setRunId(nextRun);
+    setTrace(fullTrace); setSelectedEvent(fullTrace[fullTrace.length - 1]?.id ?? null); setRunTarget(null); setStage("collect"); setRunId(nextRun);
     setNotice("Run started. The coordinator collected synthetic node readings.");
   }
   function advance() {
     if (stage === "ready") { start(); return; }
     if (stage === "collect") {
-      setStage("estimate");
+      setRunTarget(estimate); setStage("estimate");
       addEvent({ stage: "estimate", title: "Reference estimate calculated", detail: "The simplified model averages accepted synthetic offsets. Network-delay compensation is shown separately and is not silently inferred.", kind: "system", payload: { accepted_nodes: accepted.map(n => n.id), offsets_ms: accepted.map(n => n.offset), sum_ms: accepted.reduce((s, n) => s + n.offset, 0), count: accepted.length, mean_offset_ms: estimate } });
       setNotice("Readings collected. Inspect the accepted set and computed estimate.");
     } else if (stage === "estimate") {
@@ -100,7 +100,7 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   function toggleNode(id: string) {
     setNodes(previous => previous.map(n => n.id === id ? { ...n, available: !n.available } : n));
     setNotice("Node availability changed. Reset or start a new run to apply the scenario change.");
-    setStage("ready"); setTrace([]); setSelectedEvent(null);
+    setStage("ready"); setRunTarget(null); setTrace([]); setSelectedEvent(null);
   }
   function updateOffset(id: string, value: number) {
     setNodes(previous => previous.map(n => n.id === id ? { ...n, offset: value } : n));
