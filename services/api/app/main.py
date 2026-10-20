@@ -67,7 +67,6 @@ def liveness():
 
 @app.get("/health/ready")
 def readiness(db: Session = Depends(get_db)):
-    # DB availability is part of readiness: traffic should not be routed to a pod without persistence.
     try:
         db.query(Incident).limit(1).all()
     except Exception as exc:
@@ -81,6 +80,7 @@ def overview(db: Session = Depends(get_db)):
     open_count = sum(i.status != "resolved" for i in all_incidents)
     critical = sum(i.severity == "critical" and i.status != "resolved" for i in all_incidents)
     recent_events = db.query(EventRecord).order_by(desc(EventRecord.id)).limit(8).all()
+    broker_configured = bool(os.getenv("RABBITMQ_HOST"))
     return {
         "service":"AegisGrid Command Centre",
         "as_of":datetime.now(timezone.utc).isoformat(),
@@ -88,9 +88,11 @@ def overview(db: Session = Depends(get_db)):
                    "events_recorded":db.query(EventRecord).count()},
         "services":[{"name":"API gateway","state":"up","detail":"FastAPI endpoint responding","kind":"runtime"},
                     {"name":"PostgreSQL","state":"up","detail":"Reachable through readiness dependency","kind":"runtime"},
-                    {"name":"RabbitMQ","state":"configured" if os.getenv("RABBITMQ_HOST") else "not-configured",
-                     "detail":"Publish is checked per event; see event broker result","kind":"runtime"},
-                    {"name":"Concept labs","state":"up","detail":"Deterministic simulation endpoints","kind":"application"}],
+                    {"name":"RabbitMQ","state":"configured" if broker_configured else "not-configured",
+                     "detail":"Configured; publication outcome is reported per event" if broker_configured else "RABBITMQ_HOST not configured","kind":"runtime"},
+                    {"name":"Event worker","state":"configured" if broker_configured else "not-configured",
+                     "detail":"Independent consumer; verify processing in worker logs and ledger" if broker_configured else "Worker/broker not configured","kind":"runtime"},
+                    {"name":"Concept labs","state":"up","detail":"Deterministic educational model endpoints","kind":"application"}],
         "recent_events":[{"id":e.id,"event_type":e.event_type,"source":e.source,"payload":e.payload,"created_at":e.created_at.isoformat()} for e in recent_events]
     }
 
@@ -177,12 +179,11 @@ def get_lab(lab_id: str):
 
 @app.websocket("/ws/events")
 async def websocket_events(websocket: WebSocket):
-    """A small live transport demo. Clients receive a connection notice and timestamped heartbeats."""
+    """A minimal live transport demo with a connection frame and timestamped pong responses."""
     await websocket.accept()
     try:
         await websocket.send_json({"type":"connected","message":"AegisGrid WebSocket connected","at":datetime.now(timezone.utc).isoformat()})
         while True:
-            # Respond to client text; client can send ping to receive pong. No false claim of DB tailing.
             message = await websocket.receive_text()
             await websocket.send_json({"type":"pong","echo":message,"at":datetime.now(timezone.utc).isoformat()})
     except WebSocketDisconnect:
