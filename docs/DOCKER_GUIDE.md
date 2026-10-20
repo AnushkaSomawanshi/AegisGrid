@@ -7,9 +7,10 @@ From the repository root:
 docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 api
+docker compose logs --tail=100 worker
 ```
 
-Frontend: http://localhost:3000. API docs: http://localhost:8000/docs. RabbitMQ management: http://localhost:15672. PostgreSQL host port is 5433 to reduce conflict with local PostgreSQL.
+Frontend: http://localhost:3000. API docs: http://localhost:8000/docs. RabbitMQ management: http://localhost:15672. The independent `worker` service consumes broker events and persists delivery records. PostgreSQL host port is 5433 to reduce conflict with local PostgreSQL.
 
 ## Diagnose
 
