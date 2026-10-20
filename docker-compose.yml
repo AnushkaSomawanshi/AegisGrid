@@ -47,7 +47,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
     depends_on:
-      postgres: {condition: service_healthy}
+      api: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     restart: unless-stopped
   outbox-dispatcher:
@@ -66,7 +66,7 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
       OUTBOX_POLL_SECONDS: "3"
     depends_on:
-      postgres: {condition: service_healthy}
+      api: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     restart: unless-stopped
   postgres:
