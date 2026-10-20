@@ -158,8 +158,8 @@ The following items have since been added on branch `feature/aegisgrid-complete-
 - A conditional availability update for reservation to reduce double-reservation races on PostgreSQL.
 - Persisted experiment runs with parameter/result/trace payload, step, reset, pause, resume, and labelled simulated fault insertion.
 - Beacon timeout/missed-heartbeat simulation and chronological incident-forensics endpoint with an explicit causality limitation.
-- Transactional event + outbox commit, outbox inspection/manual retry endpoints, RabbitMQ publisher confirms, and worker deduplication by stable event ID.
+- Transactional event + outbox commit, independent polling outbox dispatcher, outbox inspection/manual retry endpoints, RabbitMQ publisher confirms, and worker deduplication by stable event ID.
 - New frontend pages: interactive OpenStreetMap resource markers, resource registration/reservation/release, experiment trace workbench, and outbox/worker trace console.
 - Real HTTP load probe script, optional API HPA manifest, and detailed Docker/Kubernetes runbook.
 
-This is meaningful progress but **does not close the whole acceptance checklist**. Remaining major work includes full algorithm state machines/invariants, automatic outbox dispatch and dead-letter policy, causal IDs/graph, real telemetry stream, live Docker/Kubernetes runtime adapter, measured end-to-end load/fault tests, and running the stack/cluster in an actual development environment. Current map markers are seeded example coordinates and do not represent live GPS.
+This is meaningful progress but **does not close the whole acceptance checklist**. Remaining major work includes full algorithm state machines/invariants, bounded retry/backoff and a poison-message dead-letter policy, causal IDs/graph, real telemetry stream, live Docker/Kubernetes runtime adapter, measured end-to-end load/fault tests, and running the stack/cluster in an actual development environment. Current map markers are seeded example coordinates and do not represent live GPS.
