@@ -14,6 +14,7 @@ import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
 import { VectorClockDemo } from "./VectorClockDemo";
 import { LeaderElectionDemo } from "./LeaderElectionDemo";
+import { DeploymentStudio } from "./DeploymentStudio";
 import { CommunicationDemo } from "./CommunicationDemo";
 
 const API = (import.meta as ImportMeta & {env?: {VITE_API_URL?: string}}).env?.VITE_API_URL || "/api-proxy";
@@ -28,7 +29,7 @@ type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 const nav = [
   {label:"OVERVIEW",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & units",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow},{id:"messaging",name:"Outbox & worker",icon:MessageSquare},{id:"stream",name:"Telemetry stream",icon:Radio}]},
   {label:"DISTRIBUTED SYSTEMS",items:[{id:"labs",name:"Concept laboratory",icon:Workflow},{id:"experiments",name:"Experiment workbench",icon:Play},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"election-demo",name:"Leader election studio",icon:Network},{id:"architecture",name:"Service topology",icon:Network},{id:"scale",name:"Scale & resilience",icon:Layers3}]},
-  {label:"OPERATIONS",items:[{id:"runtime",name:"Runtime diagnostics",icon:Terminal},{id:"docs",name:"Project guide",icon:BookOpen}]}
+  {label:"OPERATIONS",items:[{id:"deployment",name:"Deployment Studio",icon:Boxes},{id:"runtime",name:"Runtime diagnostics",icon:Terminal},{id:"docs",name:"Project guide",icon:BookOpen}]}
 ];
 
 const labList = [
