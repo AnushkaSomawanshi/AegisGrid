@@ -116,13 +116,41 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         return trace, {"algorithm": "Berkeley-style average-offset model", "mean_offset_ms": mean,
                        "participants": len(offsets), "status": "calculated", "execution_mode": "simulation"}
     if lab_id == "lamport":
-        trace = [
-            {"step":1,"process":"P1","event":"local","clock_before":0,"clock_after":1,"message":"local work"},
-            {"step":2,"process":"P1","event":"send","clock_before":1,"clock_after":2,"message":"m1 timestamp=2"},
-            {"step":3,"process":"P2","event":"receive","clock_before":0,"message_clock":2,"clock_after":3,"message":"max(0,2)+1"},
-            {"step":4,"process":"P2","event":"local","clock_before":3,"clock_after":4,"message":"causal successor"},
-        ]
-        return trace, {"algorithm":"Lamport logical clock","causal_order_preserved":True,"execution_mode":"simulation"}
+        operations = parameters.get("operations", [
+            {"process":"P1","kind":"local","label":"create incident"},
+            {"process":"P1","kind":"send","label":"send dispatch request","message_id":"m1"},
+            {"process":"P2","kind":"receive","label":"receive dispatch request","message_id":"m1","message_clock":2},
+            {"process":"P2","kind":"local","label":"assign response unit"},
+            {"process":"P3","kind":"local","label":"independent inventory refresh"},
+        ])
+        if not isinstance(operations, list) or not operations or len(operations) > 100:
+            raise HTTPException(422, "operations must be a list of 1 to 100 events")
+        clocks: dict[str, int] = {}
+        trace = []
+        for index, operation in enumerate(operations):
+            if not isinstance(operation, dict):
+                raise HTTPException(422, "each operation must be an object")
+            process = str(operation.get("process", "P1"))
+            kind = str(operation.get("kind", "local"))
+            if kind not in {"local", "send", "receive"}:
+                raise HTTPException(422, "Lamport event kind must be local, send, or receive")
+            before = clocks.get(process, 0)
+            if kind == "receive":
+                message_clock = int(operation.get("message_clock", 0))
+                after = max(before, message_clock) + 1
+            else:
+                message_clock = None
+                after = before + 1
+            clocks[process] = after
+            item = {"step":index+1,"process":process,"event":kind,"label":str(operation.get("label", kind)),
+                    "clock_before":before,"clock_after":after}
+            if message_clock is not None:
+                item["message_clock"] = message_clock
+            if kind == "send":
+                item["message_id"] = str(operation.get("message_id", "m"+str(index+1)))
+            trace.append(item)
+        return trace, {"algorithm":"Lamport logical clock","final_process_clocks":clocks,
+                       "receive_rule":"max(local_clock, message_clock) + 1","execution_mode":"simulation"}
     if lab_id == "snapshot":
         trace = [
             {"step":1,"event":"marker.sent","process":"P1","channel":"P1->P2","detail":"Initiator records local state"},
@@ -132,33 +160,79 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         ]
         return trace, {"algorithm":"Chandy–Lamport teaching model","consistent_cut":True,"channel_state":"recorded","execution_mode":"simulation"}
     if lab_id == "vector":
-        trace = [
-            {"step":1,"event":"local","process":"P1","vector":[1,0,0]},
-            {"step":2,"event":"send","process":"P1","vector":[2,0,0],"message":"m1 carries [2,0,0]"},
-            {"step":3,"event":"receive","process":"P2","before":[0,0,0],"message_vector":[2,0,0],"vector":[2,1,0]},
-            {"step":4,"event":"concurrent-local","process":"P3","vector":[0,0,1]},
-        ]
-        return trace, {"algorithm":"Vector clocks","causal_pair":"P1 send -> P2 receive","concurrent_with_P2":[0,0,1],"execution_mode":"simulation"}
+        trace = []
+        p1 = [1, 0, 0]
+        trace.append({"step":1,"event":"local","process":"P1","vector":p1.copy()})
+        p1[0] += 1
+        message_vector = p1.copy()
+        trace.append({"step":2,"event":"send","process":"P1","message_id":"m1","vector":p1.copy()})
+        p2 = [0, 0, 0]
+        p2 = [max(p2[i], message_vector[i]) for i in range(3)]
+        p2[1] += 1
+        trace.append({"step":3,"event":"receive","process":"P2","message_vector":message_vector,"vector":p2.copy()})
+        p3 = [0, 0, 1]
+        trace.append({"step":4,"event":"local","process":"P3","vector":p3.copy()})
+        def vector_relation(left: list[int], right: list[int]) -> str:
+            left_le = all(a <= b for a, b in zip(left, right))
+            right_le = all(b <= a for a, b in zip(left, right))
+            if left_le and left != right:
+                return "happened-before"
+            if right_le and left != right:
+                return "happened-after"
+            return "equal" if left == right else "concurrent"
+        return trace, {"algorithm":"Vector clocks","send_receive_relation":vector_relation(message_vector, p2),
+                       "P2_vs_P3":vector_relation(p2, p3),"execution_mode":"simulation"}
     if lab_id == "election":
-        failed = str(parameters.get("failed_node", "node-4"))
-        trace = [
-            {"step":1,"event":"heartbeat.missed","node":failed,"state":"suspected"},
-            {"step":2,"event":"election.started","node":"node-2","detail":"candidate detects coordinator failure"},
-            {"step":3,"event":"election.message","from":"node-2","to":"node-3","kind":"ELECTION"},
-            {"step":4,"event":"election.ok","from":"node-3","to":"node-2","kind":"OK"},
-            {"step":5,"event":"coordinator.announced","node":"node-3","kind":"COORDINATOR"},
-        ]
-        return trace, {"algorithm":"Bully election model","failed_node":failed,"elected_coordinator":"node-3","execution_mode":"simulation"}
+        node_ids = parameters.get("node_ids", [1, 2, 3, 4, 5])
+        failed_raw = parameters.get("failed_node", 4)
+        if not isinstance(node_ids, list) or not node_ids or len(node_ids) > 50 or any(not isinstance(n, int) for n in node_ids):
+            raise HTTPException(422, "node_ids must be a non-empty list of up to 50 integer IDs")
+        if len(set(node_ids)) != len(node_ids):
+            raise HTTPException(422, "node_ids must be unique")
+        failed_id = int(failed_raw) if str(failed_raw).isdigit() else failed_raw
+        alive = sorted([n for n in node_ids if n != failed_id])
+        trace = [{"step":1,"event":"heartbeat.missed","node":str(failed_id),"state":"suspected"}]
+        lower = [n for n in alive if isinstance(n, int) and isinstance(failed_id, int) and n < failed_id]
+        candidate = max(lower) if lower else (max(alive) if alive else None)
+        winner = max(alive) if alive else None
+        if candidate is not None:
+            trace.append({"step":2,"event":"election.started","node":candidate,"detail":"candidate detects coordinator failure"})
+            higher = [n for n in alive if isinstance(n, int) and n > candidate]
+            for offset, node in enumerate(higher):
+                trace.append({"step":len(trace)+1,"event":"election.message","from":candidate,"to":node,"kind":"ELECTION"})
+                trace.append({"step":len(trace)+1,"event":"election.ok","from":node,"to":candidate,"kind":"OK"})
+        if winner is not None:
+            trace.append({"step":len(trace)+1,"event":"coordinator.announced","node":winner,"kind":"COORDINATOR"})
+        return trace, {"algorithm":"Bully election model","failed_node":failed_id,"alive_nodes":alive,
+                       "elected_coordinator":winner,"execution_mode":"simulation"}
     if lab_id == "mutex":
-        trace = [
-            {"step":1,"event":"request","process":"P1","timestamp":1,"state":"requesting"},
-            {"step":2,"event":"request","process":"P2","timestamp":1,"state":"requesting"},
-            {"step":3,"event":"reply","from":"P2","to":"P1","state":"permission-granted"},
-            {"step":4,"event":"critical-section.enter","process":"P1","owner":"resource-A"},
-            {"step":5,"event":"critical-section.exit","process":"P1","owner":None},
-            {"step":6,"event":"critical-section.enter","process":"P2","owner":"resource-A"},
-        ]
-        return trace, {"algorithm":"Ricart–Agrawala model","single_owner_invariant":True,"max_simultaneous_owners":1,"execution_mode":"simulation"}
+        requests = parameters.get("requests", [
+            {"process":"P1","timestamp":1,"process_id":1},
+            {"process":"P2","timestamp":1,"process_id":2},
+            {"process":"P3","timestamp":3,"process_id":3},
+        ])
+        if not isinstance(requests, list) or not requests or len(requests) > 50:
+            raise HTTPException(422, "requests must be a non-empty list of up to 50 requests")
+        try:
+            ordered = sorted(requests, key=lambda r:(int(r["timestamp"]), int(r["process_id"])))
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(422, "each request needs integer timestamp and process_id")
+        trace = []
+        for index, request in enumerate(requests):
+            trace.append({"step":len(trace)+1,"event":"request.multicast","process":str(request.get("process", "P"+str(index+1))),
+                          "timestamp":int(request["timestamp"]),"process_id":int(request["process_id"])})
+        owner_history = []
+        for request in ordered:
+            process = str(request.get("process", "P"+str(request["process_id"])))
+            trace.append({"step":len(trace)+1,"event":"permission.granted","process":process,
+                          "ordering_key":[int(request["timestamp"]), int(request["process_id"])]})
+            trace.append({"step":len(trace)+1,"event":"critical-section.enter","process":process,"owner":process})
+            owner_history.append(process)
+            trace.append({"step":len(trace)+1,"event":"critical-section.exit","process":process,"owner":None})
+        return trace, {"algorithm":"Ricart–Agrawala request-order model","grant_order":[str(r.get("process", "P"+str(r["process_id"]))) for r in ordered],
+                       "single_owner_invariant":True,"max_simultaneous_owners":1,
+                       "note":"This trace serializes critical-section ownership; it is not a lock on an external production resource.",
+                       "execution_mode":"simulation"}
     if lab_id == "beacon":
         misses = int(parameters.get("missed_beats", 3))
         threshold = int(parameters.get("threshold", 3))
