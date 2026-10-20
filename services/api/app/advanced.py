@@ -367,7 +367,7 @@ def incident_forensics(incident_id: int, db: Session = Depends(get_db)):
             payload = json.loads(event.payload)
         except json.JSONDecodeError:
             payload = {}
-        if payload.get("id") == incident_id or payload.get("incident_id") == incident_id or payload.get("incident", {}).get("id") == incident_id:
+        if payload.get("id") == incident_id or payload.get("incident_id") == incident_id or payload.get("correlation_id") == str(incident_id) or payload.get("incident", {}).get("id") == incident_id:
             matches.append({"id":event.id,"event_type":event.event_type,"source":event.source,
                             "payload":payload,"created_at":event.created_at.isoformat()})
     nodes = [{"id":f"incident-{incident.id}","kind":"incident","label":incident.title}]
