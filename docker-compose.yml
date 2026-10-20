@@ -74,6 +74,18 @@ services:
         condition: service_healthy
     networks: [aegisgrid]
 
+  load-runner:
+    build:
+      context: ./services/load-runner
+    container_name: aegisgrid-load-runner
+    restart: unless-stopped
+    environment:
+      LOAD_TEST_TARGET_URL: http://api:8000/health/live
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [aegisgrid]
+
   frontend:
     build:
       context: ./frontend
