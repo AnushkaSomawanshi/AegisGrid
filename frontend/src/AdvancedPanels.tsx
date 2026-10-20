@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Clock3, Database, MapPin, Package, Play, Plus, Radio, RotateCcw, Save, ShieldCheck, StepForward, Workflow } from "lucide-react";
 import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
 
@@ -57,6 +57,39 @@ export function ResourceCenter(){
  </div>;
 }
 
+
+
+type TelemetryFrame={type:string;mode?:string;sequence?:number;at?:string;load_pct?:number;queue_depth?:number;node?:string;message?:string};
+export function StreamMonitor(){
+ const [connected,setConnected]=useState(false);
+ const [frames,setFrames]=useState<TelemetryFrame[]>([]);
+ const [gaps,setGaps]=useState(0);
+ const [error,setError]=useState("");
+ const socket=useRef<WebSocket|null>(null);
+ const lastSequence=useRef<number|null>(null);
+ function start(){
+  if(socket.current&&socket.current.readyState<=WebSocket.OPEN)return;
+  setError("");
+  const scheme=window.location.protocol==="https:"?"wss:":"ws:";
+  const ws=new WebSocket(scheme+"//"+window.location.host+"/ws/telemetry");
+  socket.current=ws;
+  ws.onopen=()=>setConnected(true);
+  ws.onmessage=(message)=>{try{const frame=JSON.parse(message.data) as TelemetryFrame;if(typeof frame.sequence==="number"){if(lastSequence.current!==null&&frame.sequence>lastSequence.current+1)setGaps(n=>n+frame.sequence!-lastSequence.current!-1);lastSequence.current=frame.sequence;}setFrames(old=>[frame,...old].slice(0,80));}catch{setError("Received a non-JSON frame");}};
+  ws.onerror=()=>setError("WebSocket transport error. Check API health and the /ws proxy.");
+  ws.onclose=()=>{setConnected(false);socket.current=null;};
+ }
+ function stop(){if(socket.current){socket.current.send("close");socket.current.close();socket.current=null;}setConnected(false);}
+ useEffect(()=>()=>{socket.current?.close();},[]);
+ const telemetry=frames.filter(f=>f.type==="telemetry");
+ const latest=telemetry[0];
+ return <div className="advanced-page">
+  <div className="page-intro"><div><div className="eyebrow">COMMUNICATION / STREAM OBSERVABILITY</div><h1>Telemetry stream</h1><p>Observe a real WebSocket connection carrying synthetic sequenced telemetry frames. This validates transport and sequence handling, not live device metrics.</p></div><div className="intro-actions">{connected?<button className="btn-secondary" onClick={stop}>Disconnect stream</button>:<button className="btn-primary" onClick={start}><Radio size={15}/> Connect stream</button>}</div></div>
+  <div className="connection-banner connection-demo"><span className="banner-icon"><Radio size={17}/></span><div><b>{connected?"WebSocket connected":"Stream disconnected"}</b><span>Server endpoint: /ws/telemetry · sequence numbers and timestamps are real transport frames; load and queue values are deterministic synthetic data.</span></div><span className="banner-mode">{connected?"CONNECTED":"SYNTHETIC FEED"}</span></div>
+  {error&&<div className="connection-banner connection-demo"><AlertTriangle size={17}/><div><b>Stream diagnostic</b><span>{error}</span></div></div>}
+  <div className="metric-grid"><div className="metric-card"><div className="metric-top"><span>Connection</span><div className="metric-icon tone-green"><Radio size={18}/></div></div><div className="metric-value">{connected?"LIVE":"OFF"}</div><div className="metric-foot"><span>WebSocket transport</span></div></div><div className="metric-card"><div className="metric-top"><span>Frames received</span><div className="metric-icon tone-blue"><Activity size={18}/></div></div><div className="metric-value">{telemetry.length}</div><div className="metric-foot"><span>Most recent 80 frames retained in this session</span></div></div><div className="metric-card"><div className="metric-top"><span>Sequence gaps</span><div className="metric-icon tone-orange"><AlertTriangle size={18}/></div></div><div className="metric-value">{gaps}</div><div className="metric-foot"><span>Observed skipped sequence numbers</span></div></div><div className="metric-card"><div className="metric-top"><span>Latest load sample</span><div className="metric-icon tone-violet"><Activity size={18}/></div></div><div className="metric-value">{latest?latest.load_pct+"%":"—"}</div><div className="metric-foot"><span>Synthetic demonstration value</span></div></div></div>
+  <div className="dashboard-grid"><section className="panel feed-panel"><div className="section-head"><div><h3>Frame timeline</h3><span>Newest first · local session buffer</span></div><Activity size={17}/></div><div className="event-feed trace-feed">{frames.map((frame,i)=><div className="feed-row trace-row" key={i}><div className="feed-dot feed-blue"/><div className="feed-copy"><b>{frame.type==="telemetry"?"Frame "+frame.sequence:frame.type||"message"}</b><span>{frame.at||frame.message||"WebSocket event"}{frame.node?" · node "+frame.node:""}{frame.queue_depth!==undefined?" · queue "+frame.queue_depth:""}</span></div><code>{frame.load_pct!==undefined?frame.load_pct+"%":"WS"}</code></div>)}{frames.length===0&&<div className="empty-state">Connect the stream to begin receiving sequenced frames.</div>}</div></section><section className="panel runtime-checks"><div className="section-head"><div><h3>Transport diagnostics</h3><span>What this demonstration verifies</span></div><CheckCircle2 size={17}/></div><div className="diagnostic-grid"><div><CheckCircle2 size={17}/><b>Handshake</b><p>Browser establishes the WebSocket connection through the configured proxy.</p></div><div><CheckCircle2 size={17}/><b>Sequence tracking</b><p>Client checks sequence increments and counts any observed gaps.</p></div><div><AlertTriangle size={17}/><b>Runtime boundary</b><p>Frames are generated by the demo endpoint. No device, broker or production telemetry source is connected.</p></div></div><button className="btn-secondary" onClick={()=>{setFrames([]);setGaps(0);lastSequence.current=null;}}>Clear local frame history</button></section></div>
+ </div>;
+}
 
 type OutboxItem={id:number;event_record_id:number;event_id:string;event_type:string;status:string;attempts:number;last_error:string;created_at:string;published_at:string|null};
 type LedgerItem={id:number;event_type:string;source:string;payload:unknown;created_at:string};
