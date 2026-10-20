@@ -228,6 +228,14 @@ kubectl delete pod -n aegisgrid -l app=aegisgrid-api --wait=false
 kubectl get pods -n aegisgrid -l app=aegisgrid-api -w
 ```
 
+For a repeatable readiness-timing JSON record (guarded to namespace `aegisgrid` and requiring explicit confirmation):
+
+```bash
+python scripts/k8s_recovery_probe.py --namespace aegisgrid --selector app=aegisgrid-api --confirm --output artifacts/recovery-r1.json
+```
+
+The script deletes one matching Pod and measures how long until a new replacement Pod becomes Ready. It does not measure user-visible downtime; run a parallel request probe for that.
+
 Record:
 - Failure injection timestamp.
 - Pod termination and replacement timestamps.
