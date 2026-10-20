@@ -152,13 +152,44 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         return trace, {"algorithm":"Lamport logical clock","final_process_clocks":clocks,
                        "receive_rule":"max(local_clock, message_clock) + 1","execution_mode":"simulation"}
     if lab_id == "snapshot":
-        trace = [
-            {"step":1,"event":"marker.sent","process":"P1","channel":"P1->P2","detail":"Initiator records local state"},
-            {"step":2,"event":"marker.received","process":"P2","channel":"P1->P2","detail":"P2 records local state"},
-            {"step":3,"event":"channel.recording","process":"P2","channel":"P2->P1","detail":"Record messages until marker arrives"},
-            {"step":4,"event":"marker.received","process":"P1","channel":"P2->P1","detail":"Channel recording closes"},
-        ]
-        return trace, {"algorithm":"Chandy–Lamport teaching model","consistent_cut":True,"channel_state":"recorded","execution_mode":"simulation"}
+        processes = parameters.get("processes", ["P1", "P2", "P3"])
+        initiator = str(parameters.get("initiator", "P1"))
+        messages = parameters.get("messages_in_transit", [{"from":"P2","to":"P3","message":"dispatch.updated #104"}])
+        if not isinstance(processes, list) or len(processes) < 2 or len(processes) > 10 or len(set(processes)) != len(processes):
+            raise HTTPException(422, "processes must contain 2 to 10 unique process IDs")
+        processes = [str(p) for p in processes]
+        if initiator not in processes:
+            raise HTTPException(422, "initiator must be a member of processes")
+        if not isinstance(messages, list) or len(messages) > 100:
+            raise HTTPException(422, "messages_in_transit must be a list of at most 100 messages")
+        trace = [{"step":1,"event":"process.state_recorded","process":initiator,"detail":"Initiator records its local state"}]
+        for target in processes:
+            if target != initiator:
+                trace.append({"step":len(trace)+1,"event":"marker.sent","process":initiator,"to":target,"channel":initiator+"->"+target})
+        for target in processes:
+            if target == initiator:
+                continue
+            trace.append({"step":len(trace)+1,"event":"marker.received","process":target,"from":initiator,
+                          "detail":"First marker records local state"})
+            trace.append({"step":len(trace)+1,"event":"process.state_recorded","process":target,"detail":"Local state captured"})
+            for destination in processes:
+                if destination != target:
+                    trace.append({"step":len(trace)+1,"event":"marker.sent","process":target,"to":destination,
+                                  "channel":target+"->"+destination})
+        captured = []
+        for message in messages:
+            if not isinstance(message, dict) or str(message.get("from")) not in processes or str(message.get("to")) not in processes:
+                raise HTTPException(422, "each in-transit message must use process IDs from the scenario")
+            captured.append({"from":str(message["from"]),"to":str(message["to"]),"message":str(message.get("message","sample message"))})
+            trace.append({"step":len(trace)+1,"event":"channel.message_recorded","channel":str(message["from"])+"->"+str(message["to"]),
+                          "message":str(message.get("message","sample message"))})
+        for target in processes:
+            if target != initiator:
+                trace.append({"step":len(trace)+1,"event":"channel.recording.closed","process":target,
+                              "detail":"Marker arrived on each recorded incoming channel"})
+        return trace, {"algorithm":"Chandy–Lamport teaching model","initiator":initiator,"processes":processes,
+                       "process_states_recorded":len(processes),"messages_in_transit_recorded":len(captured),
+                       "captured_messages":captured,"consistent_cut":True,"execution_mode":"simulation"}
     if lab_id == "vector":
         trace = []
         p1 = [1, 0, 0]
