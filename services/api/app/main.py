@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import time
 import uuid
@@ -34,6 +35,9 @@ db_lock = asyncio.Lock()
 broker_connection: aio_pika.RobustConnection | None = None
 broker_channel: aio_pika.abc.AbstractRobustChannel | None = None
 subscribers: set[WebSocket] = set()
+telemetry_subscribers: set[WebSocket] = set()
+telemetry_sequence = 0
+broker_metrics: dict[str, int] = {"consumed": 0, "errors": 0}
 state: dict[str, Any] = {
     "clock_sync": None, "lamport": None, "global_snapshot": None,
     "vector": None, "election": None, "mutual_exclusion": None,
@@ -71,6 +75,12 @@ def init_db():
           CREATE TABLE IF NOT EXISTS experiment_runs (
             id TEXT PRIMARY KEY, concept TEXT NOT NULL, scenario TEXT NOT NULL,
             result JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        """)
+        conn.execute("""
+          CREATE TABLE IF NOT EXISTS broker_deliveries (
+            id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, event_type TEXT NOT NULL,
+            payload JSONB NOT NULL, consumed_at TIMESTAMPTZ NOT NULL DEFAULT now()
           )
         """)
         conn.commit()
@@ -120,9 +130,51 @@ async def broadcast(message: dict[str, Any]):
     for ws in dead:
         subscribers.discard(ws)
 
+async def consume_broker_message(message: aio_pika.abc.AbstractIncomingMessage):
+    async with message.process(requeue=False):
+        try:
+            event = json.loads(message.body.decode("utf-8"))
+            with connect_db() as conn:
+                conn.execute(
+                    "INSERT INTO broker_deliveries(id,trace_id,event_type,payload) VALUES(%s,%s,%s,%s) ON CONFLICT(id) DO NOTHING",
+                    (event.get("id", str(uuid.uuid4())), event.get("trace_id", "unknown"),
+                     event.get("event_type", "unknown"), json.dumps(event))
+                )
+                conn.commit()
+            broker_metrics["consumed"] += 1
+            await broadcast({"type": "broker.delivery", "data": {"id": event.get("id"), "event_type": event.get("event_type"), "trace_id": event.get("trace_id"), "consumed_at": utcnow()}})
+        except Exception:
+            broker_metrics["errors"] += 1
+            raise
+
+async def telemetry_loop():
+    global telemetry_sequence
+    while True:
+        telemetry_sequence += 1
+        sample = {
+            "id": f"TEL-{telemetry_sequence:06d}",
+            "sequence": telemetry_sequence,
+            "source": "SIMULATED-FIELD-UNIT-01",
+            "temperature_c": round(28 + 2.4 * math.sin(telemetry_sequence / 4), 2),
+            "battery_pct": max(0, 96 - telemetry_sequence // 90),
+            "sampled_at": utcnow(),
+            "transport": "WebSocket",
+            "payload_mode": "simulated"
+        }
+        dead = []
+        for ws in list(telemetry_subscribers):
+            try:
+                await ws.send_json({"type": "telemetry", "data": sample})
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            telemetry_subscribers.discard(ws)
+        await asyncio.sleep(1)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global broker_connection, broker_channel
+    telemetry_task = asyncio.create_task(telemetry_loop())
     for attempt in range(8):
         try:
             await asyncio.to_thread(init_db)
@@ -135,12 +187,24 @@ async def lifespan(app: FastAPI):
         broker_url = RABBITMQ_URL or f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}/"
         broker_connection = await aio_pika.connect_robust(broker_url, timeout=4)
         broker_channel = await broker_connection.channel()
+        await broker_channel.set_qos(prefetch_count=20)
+        exchange = await broker_channel.declare_exchange("aegisgrid.events", aio_pika.ExchangeType.TOPIC, durable=True)
+        queue = await broker_channel.declare_queue("aegisgrid.audit", durable=True)
+        await queue.bind(exchange, routing_key="#")
+        await queue.consume(consume_broker_message)
     except Exception:
         broker_connection = None
         broker_channel = None
-    yield
-    if broker_connection:
-        await broker_connection.close()
+    try:
+        yield
+    finally:
+        telemetry_task.cancel()
+        try:
+            await telemetry_task
+        except asyncio.CancelledError:
+            pass
+        if broker_connection:
+            await broker_connection.close()
 
 app = FastAPI(title="AegisGrid API", version="0.1.0", description="Emergency response APIs and educational distributed-systems labs.", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
@@ -392,19 +456,166 @@ def vector_compare(body: dict[str,list[int]]):
     else: relation="CONCURRENT"
     return {"a":a,"b":b,"relation":relation,"explanation":{"A_BEFORE_B":"Every component of A is <= B and at least one is smaller.","B_BEFORE_A":"Every component of B is <= A and at least one is smaller.","CONCURRENT":"Neither vector is component-wise <= the other.","EQUAL":"The vectors are identical."}[relation]}
 
-# ---------- Global snapshot teaching model ----------
+# ---------- Global snapshot / Chandy-Lamport-style educational simulation ----------
+def init_snapshot():
+    pids = ["P1", "P2", "P3"]
+    return {
+        "processes": {p: {"counter": 0, "recorded": False, "snapshot_state": None, "sent_messages": [], "received_messages": [], "snapshot_sent_messages": [], "snapshot_received_messages": []} for p in pids},
+        "channels": [{"from": "P1", "to": "P2", "recording": False, "snapshot_messages": []},
+                     {"from": "P2", "to": "P3", "recording": False, "snapshot_messages": []},
+                     {"from": "P3", "to": "P1", "recording": False, "snapshot_messages": []}],
+        "messages": {}, "marker_queue": [], "events": [], "status": "READY",
+        "initiator": None, "snapshot_complete": False, "consistency": None,
+        "note": "Marker/channel recording is explicitly modelled for this educational simulation."
+    }
+
+def get_snapshot():
+    if state["global_snapshot"] is None:
+        state["global_snapshot"] = init_snapshot()
+    return state["global_snapshot"]
+
+def channel_for(lab, src, dst):
+    channel = next((c for c in lab["channels"] if c["from"] == src and c["to"] == dst), None)
+    if channel is None:
+        raise HTTPException(422, f"No directed channel {src} -> {dst} exists in this topology")
+    return channel
+
+def record_snapshot_process(lab, pid):
+    proc = lab["processes"][pid]
+    proc["recorded"] = True
+    proc["snapshot_state"] = {"counter": proc["counter"], "sent_messages": list(proc["sent_messages"]), "received_messages": list(proc["received_messages"])}
+    proc["snapshot_sent_messages"] = list(proc["sent_messages"])
+    proc["snapshot_received_messages"] = list(proc["received_messages"])
+
+def check_snapshot_consistency(lab):
+    received = []
+    for pid, proc in lab["processes"].items():
+        if proc["recorded"]:
+            received.extend((pid, mid) for mid in proc["snapshot_received_messages"])
+    missing = []
+    for receiver, mid in received:
+        msg = lab["messages"].get(mid)
+        if not msg:
+            missing.append({"receiver": receiver, "message_id": mid, "reason": "message record missing"})
+            continue
+        sender = lab["processes"][msg["from"]]
+        if sender["recorded"] and mid not in sender["snapshot_sent_messages"]:
+            channel = next((c for c in lab["channels"] if c["from"] == msg["from"] and c["to"] == receiver), None)
+            if not channel or mid not in channel["snapshot_messages"]:
+                missing.append({"receiver": receiver, "message_id": mid, "reason": "receive included without send or in-transit channel record"})
+    return {"consistent": not missing, "violations": missing, "checked_processes": [p for p,x in lab["processes"].items() if x["recorded"]]}
+
 @app.get("/api/labs/global-snapshot")
 def snapshot_state():
-    if state["global_snapshot"] is None:
-        state["global_snapshot"]={"processes":{"P1":{"balance":10,"recorded":False},"P2":{"balance":10,"recorded":False},"P3":{"balance":10,"recorded":False}},"channels":[{"from":"P1","to":"P2","messages":[]},{"from":"P2","to":"P3","messages":[]},{"from":"P3","to":"P1","messages":[]}],"events":[],"status":"READY","note":"Educational snapshot model; full marker/channel recording will be expanded in the next implementation milestone."}
-    return state["global_snapshot"]
+    return get_snapshot()
+
+@app.post("/api/labs/global-snapshot/send")
+async def snapshot_send(body: EventAction):
+    lab = get_snapshot()
+    src, dst = body.process_id, body.target_id
+    if src not in lab["processes"] or not dst or dst not in lab["processes"]:
+        raise HTTPException(422, "process_id and valid target_id are required")
+    channel = channel_for(lab, src, dst)
+    lab["processes"][src]["counter"] += 1
+    mid = str(uuid.uuid4())
+    msg = {"id": mid, "from": src, "to": dst, "payload": body.message or "sample state transfer", "status": "IN_TRANSIT", "sent_at": utcnow()}
+    lab["messages"][mid] = msg
+    lab["processes"][src]["sent_messages"].append(mid)
+    if lab["processes"][dst]["recorded"] and channel["recording"]:
+        channel["snapshot_messages"].append(mid)
+    lab["events"].append({"kind": "message.sent", "message_id": mid, "from": src, "to": dst, "at": utcnow()})
+    state["global_snapshot"] = lab
+    await publish_event("Lab.GlobalSnapshot.MessageSent", msg)
+    return {"state": lab, "message": msg}
+
+@app.post("/api/labs/global-snapshot/receive/{message_id}")
+async def snapshot_receive(message_id: str):
+    lab = get_snapshot()
+    msg = lab["messages"].get(message_id)
+    if not msg or msg["status"] != "IN_TRANSIT":
+        raise HTTPException(404, "In-transit message not found")
+    dst = msg["to"]
+    channel = channel_for(lab, msg["from"], dst)
+    if lab["processes"][dst]["recorded"] and channel["recording"]:
+        channel["snapshot_messages"].append(message_id)
+    lab["processes"][dst]["counter"] += 1
+    lab["processes"][dst]["received_messages"].append(message_id)
+    msg["status"] = "DELIVERED"
+    msg["received_at"] = utcnow()
+    lab["events"].append({"kind": "message.received", "message_id": message_id, "from": msg["from"], "to": dst, "at": utcnow()})
+    state["global_snapshot"] = lab
+    await publish_event("Lab.GlobalSnapshot.MessageReceived", {"message_id": message_id, "to": dst})
+    return {"state": lab, "message": msg}
+
 @app.post("/api/labs/global-snapshot/start")
-async def snapshot_start():
-    lab=snapshot_state()
-    for proc in lab["processes"].values(): proc["recorded"]=True
-    lab["status"]="RECORDED"
-    lab["events"].append({"id":str(uuid.uuid4()),"kind":"snapshot.recorded","at":utcnow()})
-    await publish_event("Lab.GlobalSnapshot.Recorded",{"processes":lab["processes"],"channels":lab["channels"]})
+async def snapshot_start(body: EventAction):
+    lab = get_snapshot()
+    initiator = body.process_id if body.process_id in lab["processes"] else "P1"
+    for proc in lab["processes"].values():
+        proc.update({"recorded": False, "snapshot_state": None, "snapshot_sent_messages": [], "snapshot_received_messages": []})
+    for channel in lab["channels"]:
+        channel["recording"] = False
+        channel["snapshot_messages"] = []
+    lab["marker_queue"] = []
+    lab["initiator"] = initiator
+    lab["status"] = "RECORDING"
+    lab["snapshot_complete"] = False
+    lab["consistency"] = None
+    record_snapshot_process(lab, initiator)
+    for channel in lab["channels"]:
+        if channel["to"] == initiator:
+            channel["recording"] = True
+    for channel in lab["channels"]:
+        if channel["from"] == initiator:
+            lab["marker_queue"].append({"from": initiator, "to": channel["to"]})
+            lab["events"].append({"kind": "marker.sent", "from": initiator, "to": channel["to"], "at": utcnow()})
+    lab["events"].append({"kind": "snapshot.started", "initiator": initiator, "at": utcnow()})
+    state["global_snapshot"] = lab
+    await publish_event("Lab.GlobalSnapshot.Started", {"initiator": initiator})
+    return lab
+
+@app.post("/api/labs/global-snapshot/step")
+async def snapshot_step():
+    lab = get_snapshot()
+    if not lab["marker_queue"]:
+        lab["snapshot_complete"] = all(p["recorded"] for p in lab["processes"].values())
+        lab["status"] = "COMPLETE" if lab["snapshot_complete"] else "WAITING"
+        if lab["snapshot_complete"]:
+            lab["consistency"] = check_snapshot_consistency(lab)
+        return lab
+    marker = lab["marker_queue"].pop(0)
+    src, dst = marker["from"], marker["to"]
+    incoming = channel_for(lab, src, dst)
+    proc = lab["processes"][dst]
+    lab["events"].append({"kind": "marker.received", "from": src, "to": dst, "at": utcnow()})
+    if not proc["recorded"]:
+        record_snapshot_process(lab, dst)
+        incoming["recording"] = False
+        for channel in lab["channels"]:
+            if channel["to"] == dst and channel is not incoming:
+                channel["recording"] = True
+        for channel in lab["channels"]:
+            if channel["from"] == dst:
+                lab["marker_queue"].append({"from": dst, "to": channel["to"]})
+                lab["events"].append({"kind": "marker.sent", "from": dst, "to": channel["to"], "at": utcnow()})
+    else:
+        incoming["recording"] = False
+    lab["snapshot_complete"] = not lab["marker_queue"] and all(p["recorded"] for p in lab["processes"].values())
+    if lab["snapshot_complete"]:
+        lab["status"] = "COMPLETE"
+        lab["consistency"] = check_snapshot_consistency(lab)
+    state["global_snapshot"] = lab
+    await publish_event("Lab.GlobalSnapshot.MarkerProcessed", {"marker": marker, "complete": lab["snapshot_complete"]})
+    return lab
+
+@app.post("/api/labs/global-snapshot/run")
+async def snapshot_run(body: EventAction):
+    await snapshot_start(body)
+    lab = get_snapshot()
+    for _ in range(50):
+        if not lab["marker_queue"]:
+            break
+        lab = await snapshot_step()
     return lab
 
 # ---------- Election lab (Bully algorithm model) ----------
