@@ -160,3 +160,11 @@ Returns the incident plus chronological event records whose persisted payload ma
 ## Runtime measurement utility
 
 Run `python scripts/http_load_probe.py --url http://localhost:8000/health/live --requests 300 --concurrency 20 --output artifacts/api-baseline.json` to record real HTTP response samples. The script does not collect server CPU/memory, broker depth, or worker throughput; those must be measured separately.
+
+
+## WebSocket telemetry stream
+
+### WS /ws/telemetry
+Opens a real WebSocket transport and sends a connected frame followed by monotonically sequenced synthetic telemetry frames approximately once per second. Frames include timestamp, sequence, demo node label, load sample and queue-depth sample. Values are deterministic demonstration data and must not be represented as live infrastructure telemetry.
+
+The dashboard's **Telemetry stream** page connects to this endpoint and shows the received frames and observed sequence gaps. The client can disconnect/reconnect; sequence-gap counts are session-local and do not persist.
