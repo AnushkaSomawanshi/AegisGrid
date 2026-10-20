@@ -164,6 +164,7 @@ function App(){
     {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
     {page==="scale"&&<ScalePage apiState={apiState} onNavigate={navigate}/>}
+    {page==="deployment"&&<DeploymentStudio onBack={()=>navigate("command")}/>}
     {page==="runtime"&&<RuntimePage services={services} apiState={apiState} selectedService={selectedService} onSelect={setSelectedService} onRefresh={loadData}/>}
     {page==="docs"&&<DocsPage onNavigate={navigate}/>}
     <footer className="footer"><span>AEGISGRID <i>·</i> DISTRIBUTED RESPONSE PLATFORM</span><span>Academic systems lab <b>•</b> v1.0.0</span></footer>
