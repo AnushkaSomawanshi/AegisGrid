@@ -46,7 +46,7 @@ def record_event(db: Session, event_type: str, source: str, payload: dict[str, A
     event = EventRecord(event_type=event_type, source=source, payload=json.dumps(payload, ensure_ascii=False))
     db.add(event)
     db.flush()
-    envelope = {"event_id": str(event.id), **payload}
+    envelope = {**payload, "event_id": str(event.id)}
     outbox = OutboxRecord(event_record_id=event.id, event_id=str(event.id), event_type=event_type,
                           payload=json.dumps(envelope, ensure_ascii=False), status="pending")
     db.add(outbox)
