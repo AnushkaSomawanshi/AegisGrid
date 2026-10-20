@@ -35,10 +35,14 @@ def test_lab_endpoints():
 
 
 def test_event_ledger():
-    assert client.post("/api/events/demo").status_code == 200
+    emitted = client.post("/api/events/demo")
+    assert emitted.status_code == 200
     response = client.get("/api/events")
     assert response.status_code == 200
     assert response.json()["count"] >= 1
+    outbox = client.get("/api/outbox")
+    assert outbox.status_code == 200
+    assert any(item["event_record_id"] == emitted.json()["id"] for item in outbox.json()["items"])
 
 
 def test_invalid_lab():
