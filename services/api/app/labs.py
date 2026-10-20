@@ -17,7 +17,6 @@ def physical_clock_demo(offsets: list[int] | None = None) -> dict[str, Any]:
 
 
 def lamport_demo() -> dict[str, Any]:
-    # A -> B message, with independent event C on node-3.
     events = [
         {"id":"A1","node":"node-1","event":"create incident","clock":1,"relation":"local"},
         {"id":"A2","node":"node-1","event":"publish dispatch request","clock":2,"relation":"send"},
@@ -33,14 +32,30 @@ def snapshot_demo() -> dict[str, Any]:
 
 
 def vector_demo() -> dict[str, Any]:
-    return {"concept":"Vector clocks","note":"Synthetic event vectors; vector order is component-wise.","events":[{"id":"A","node":"node-1","vector":[1,0,0]},{"id":"B","node":"node-1","vector":[2,0,0]},{"id":"C","node":"node-2","vector":[1,1,0]},{"id":"D","node":"node-3","vector":[0,0,1]}],"comparisons":[{"a":"A","b":"B","relation":"A happened-before B"},{"a":"A","b":"C","relation":"A happened-before C in this model"},{"a":"B","b":"C","relation":"concurrent"},{"a":"C","b":"D","relation":"concurrent"}],"rule":"V(a) < V(b) iff every component of V(a) is <= the matching component of V(b), and at least one is strictly smaller."}
+    return {
+        "concept":"Vector clocks",
+        "note":"Synthetic event vectors; vector order is component-wise.",
+        "events":[
+            {"id":"A","node":"node-1","vector":[1,0,0]},
+            {"id":"B","node":"node-1","vector":[2,0,0]},
+            {"id":"C","node":"node-2","vector":[1,1,0]},
+            {"id":"D","node":"node-3","vector":[0,0,1]},
+        ],
+        "comparisons":[
+            {"a":"A","b":"B","relation":"A happened-before B"},
+            {"a":"A","b":"C","relation":"A happened-before C in this model"},
+            {"a":"B","b":"C","relation":"concurrent"},
+            {"a":"C","b":"D","relation":"concurrent"},
+        ],
+        "rule":"V(a) < V(b) iff every component of V(a) is <= the matching component of V(b), and at least one is strictly smaller."
+    }
 
 
 def bully_demo(node_ids: list[int] | None = None, failed_id: int = 4) -> dict[str, Any]:
     node_ids = node_ids or [1,2,3,4,5]
     alive = [n for n in node_ids if n != failed_id]
     winner = max(alive) if alive else None
-    return {"concept":"Leader election","algorithm":"Bully algorithm model","note":"Failure and election are simulated; no process is killed or elected in the runtime.","nodes":[{"id":n,"state":"failed" if n==failed_id else ("leader" if n==winner else "alive")} for n in node_ids],"election":[f"Node {min(alive) if alive else '?'} detects missing coordinator", "Election messages are sent to higher-ID nodes", f"Node {winner} wins because it is the highest available node" if winner else "No available node"],"leader":winner}
+    return {"concept":"Leader election","algorithm":"Bully algorithm model","note":"Failure and election are simulated; no process is killed or elected in the runtime.","nodes":[{"id":n,"state":"failed" if n == failed_id else ("leader" if n == winner else "alive")} for n in node_ids],"election":[f"Node {min(alive) if alive else '?'} detects missing coordinator", "Election messages are sent to higher-ID nodes", f"Node {winner} wins because it is the highest available node" if winner else "No available node"],"leader":winner}
 
 
 def mutex_demo() -> dict[str, Any]:
