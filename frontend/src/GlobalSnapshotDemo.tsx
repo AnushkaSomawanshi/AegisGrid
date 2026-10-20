@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Activity, CheckCircle2, CircleDot, Download, Pause, Play, RotateCcw, ShieldCheck, StepForward, Workflow } from "lucide-react";
+import "./snapshot.css";
 
 type Event = {step:number;event:string;[key:string]:any};
 type Run = {id:number;lab_id:string;scenario:string;parameters:Record<string,unknown>;trace:Event[];result:Record<string,any>;status:string;current_step:number;created_at:string};
