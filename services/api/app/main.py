@@ -178,7 +178,9 @@ async def lifespan(app: FastAPI):
         broker_connection = await aio_pika.connect_robust(broker_url, timeout=4)
         broker_channel = await broker_connection.channel()
         await broker_channel.set_qos(prefetch_count=20)
-        await broker_channel.declare_exchange("aegisgrid.events", aio_pika.ExchangeType.TOPIC, durable=True)
+        exchange = await broker_channel.declare_exchange("aegisgrid.events", aio_pika.ExchangeType.TOPIC, durable=True)
+        audit_queue = await broker_channel.declare_queue("aegisgrid.audit", durable=True)
+        await audit_queue.bind(exchange, routing_key="#")
     except Exception:
         broker_connection = None
         broker_channel = None
