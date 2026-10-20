@@ -80,21 +80,37 @@ The model shows a local incident event, a message send, a receive and a unit ass
 ### Discussion
 Lamport clocks make a consistent ordering possible but do not fully encode causality. If the ordering of all independent events matters, use a tie-breaker or a richer causal representation.
 
-## 3. Global state snapshot — Chandy–Lamport-style model
+## 3. Global state snapshot — Chandy–Lamport-style execution studio
 
-### Objective
-Capture a consistent cut of a distributed computation by recording each process's local state and each communication channel's in-flight messages.
+### Detailed UI
 
-### Simplified marker flow
-1. The initiator records its local state and sends marker messages.
-2. A process records its local state when it receives its first marker.
-3. It records messages on a channel until the marker for that channel arrives.
-4. The snapshot combines process state with channel state.
+The dedicated Global State Capture Studio is a dark, responsive operations dashboard rather than a theory-heavy article. It presents capture metrics, logical process cards, directed-channel recording status, a selectable event ledger, a payload inspector, process-state and channel-state ledgers, and assembled JSON evidence.
 
-### Dashboard observation
-The trace contains three process-local states and a message in transit between node-2 and node-3. Ask why simply collecting three process states without channel messages can create an inconsistent picture.
+### Default execution schedule
 
-This dashboard response is a teaching example, not a real snapshot from the running API, database, broker or Kubernetes workloads.
+1. P1 (Incident & Dispatch) starts the snapshot, records its local state, then sends markers.
+2. P3 (Inventory & Monitoring) receives P1's marker first, records local state and opens recording on incoming channels other than P1 → P3.
+3. M1, `dispatch.updated #104`, is delivered from P2 to P3 while P2 → P3 is recording. The engine captures it because delivery occurs after recording starts and before P2's marker arrives.
+4. P2 records its local state after receiving the first marker and propagates markers.
+5. A marker on each recorded incoming channel closes that channel's recording window.
+6. Snapshot completion checks that every process state is recorded and every directed channel recording is closed.
+
+### Controls and evidence
+
+- Presets: message in transit, empty channel, multiple in-flight messages, and delayed-marker illustration.
+- Start creates a persisted run; Next event executes one event; Run to completion advances the cursor; Pause/Resume and Reset use the existing experiment API.
+- Visible process/channel state is derived from executed events rather than presented as if future events already happened.
+- Export JSON saves run configuration, executed trace and evidence.
+- Results include process states, directed channel states, message IDs/payloads, recording start/close steps, captured messages and consistency checks.
+
+### Invariants and limitations
+
+- The initiator records local state before sending markers.
+- A non-initiator records local state on its first marker.
+- Captured messages fall after recording begins and before the channel's closing marker.
+- The final snapshot is complete only when every modeled process state is recorded and every channel recording is closed.
+- This is a deterministic teaching simulation, not a live snapshot of the API, database, RabbitMQ or Kubernetes.
+- Channel capture is derived from modeled event order; callers do not provide a pre-labelled final in-transit message list.
 
 ## 4. Vector clocks
 
