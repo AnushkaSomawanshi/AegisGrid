@@ -245,19 +245,33 @@ def overview():
             rows = conn.execute("SELECT severity,status,count(*) AS count FROM incidents GROUP BY severity,status").fetchall()
             recent = conn.execute("SELECT * FROM incidents ORDER BY created_at DESC LIMIT 8").fetchall()
             event_count = conn.execute("SELECT count(*) AS count FROM event_ledger").fetchone()["count"]
+            worker = conn.execute("SELECT status,last_heartbeat,processed_count,error_count FROM worker_status WHERE worker_name='event-worker'").fetchone()
     except Exception as exc:
         raise HTTPException(503, f"Database unavailable: {exc}")
     incidents = [dict(row) for row in recent]
     for row in incidents:
         for key in ("created_at","updated_at"):
             row[key] = row[key].isoformat() if row.get(key) else None
+    worker_status = "degraded"
+    worker_detail = None
+    if worker:
+        heartbeat = worker["last_heartbeat"]
+        worker_detail = {
+            "status": worker["status"],
+            "last_heartbeat": heartbeat.isoformat() if heartbeat else None,
+            "processed_count": worker["processed_count"],
+            "error_count": worker["error_count"]
+        }
+        worker_status = "healthy" if worker["status"] == "READY" and heartbeat and (datetime.now(timezone.utc)-heartbeat).total_seconds() < 20 else "degraded"
     return {
       "service":"AegisGrid","mode":"demo","incident_summary":rows,
       "recent_incidents":incidents,"event_count":event_count,
+      "worker":worker_detail,
       "services":[
         {"name":"API Gateway","status":"healthy"},
         {"name":"PostgreSQL","status":"healthy"},
-        {"name":"RabbitMQ","status":"healthy" if broker_channel else "degraded"}
+        {"name":"RabbitMQ","status":"healthy" if broker_channel else "degraded"},
+        {"name":"Event Worker","status":worker_status}
       ]
     }
 
@@ -934,7 +948,14 @@ def labs_index():
 
 @app.get("/api/experiments")
 def list_experiments():
-    return state["experiments"][-100:]
+    with connect_db() as conn:
+        rows = conn.execute("SELECT * FROM experiment_runs ORDER BY created_at DESC LIMIT 100").fetchall()
+    out = []
+    for row in rows:
+        item = dict(row)
+        item["created_at"] = item["created_at"].isoformat()
+        out.append(item)
+    return out
 @app.post("/api/experiments")
 async def save_experiment(body: ExperimentRequest):
     run={"id":str(uuid.uuid4()),"scenario":body.scenario,"parameters":body.parameters,"created_at":utcnow(),"status":"RECORDED"}
