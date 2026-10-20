@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, ArrowUpRight, Bell, CheckCircle2, ChevronDown, Clock3, Crosshair, Filter, Layers3, MapPin, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, Siren, Workflow } from "lucide-react";
+import { Activity, ArrowUpRight, Bell, Clock3, Crosshair, Filter, Layers3, MapPin, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, Siren, Workflow } from "lucide-react";
 
 type Incident={id:number;title:string;category:string;severity:"low"|"medium"|"high"|"critical";status:"open"|"assigned"|"responding"|"resolved";location:string;description:string;created_at:string};
 type EventItem={id:number;event_type:string;source:string;payload:unknown;created_at:string};
