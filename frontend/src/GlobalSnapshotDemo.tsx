@@ -18,8 +18,10 @@ export function GlobalSnapshotDemo({onBack}:{onBack:()=>void}){
  const trace=run?.trace||[],executed=trace.slice(0,run?.current_step||0),active=executed[executed.length-1];
  const result=run?.result||{};
  const processes=(result.processes as string[]|undefined)||["P1","P2","P3"];
- const states=(result.process_states as Record<string,any>|undefined)||{};
- const channels=(result.channel_states as Record<string,any>[]|undefined)||[];
+ const states:Record<string,any>={};
+ executed.filter(e=>e.event==="process.state_recorded").forEach(e=>{states[e.process]={process:e.process,state_label:e.state_label,recorded_at_step:e.step,markers_received:executed.filter(m=>m.event==="marker.received"&&m.process===e.process).length};});
+ const channels:Record<string,any>[]=((result.channel_states as Record<string,any>[]|undefined)||[]).map(c=>({...c,status:"not-recording",messages:[],started_at_step:null,closed_at_step:null}));
+ executed.forEach(e=>{if(e.event==="channel.recording.started"){const c=channels.find(x=>x.channel===e.channel);if(c){c.status="recording";c.started_at_step=e.step;}}if(e.event==="channel.message_recorded"){const c=channels.find(x=>x.channel===e.channel);if(c)c.messages.push({message_id:e.message_id,payload:e.message,delivery_step:e.step});}if(e.event==="channel.recording.closed"){const c=channels.find(x=>x.channel===e.channel);if(c){c.status="closed";c.closed_at_step=e.step;}}});
  const completed=run?.status==="completed";
  const visibleEvents=useMemo(()=>trace.slice(0,Math.max(run?.current_step||0,1)),[trace,run?.current_step]);
  async function create(){setBusy(true);setError("");setNotice("");try{const selectedPreset=presets.find(p=>p.id===preset)!;const out=await api<{run:Run}>("/experiments",{method:"POST",body:JSON.stringify({lab_id:"snapshot",scenario:selectedPreset.id,parameters:selectedPreset.parameters})});setRun(out.run);setSelected(0);setNotice("Snapshot scenario created and persisted. Advance the event cursor to execute it.");}catch(e){setError(e instanceof Error?e.message:"Could not create snapshot run");}finally{setBusy(false);}}
