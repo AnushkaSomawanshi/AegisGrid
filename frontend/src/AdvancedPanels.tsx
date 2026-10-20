@@ -14,18 +14,7 @@ type Resource={id:number;code:string;name:string;kind:string;status:string;locat
 type Reservation={id:number;resource_id:number;incident_id:number|null;requested_by:string;status:string;created_at:string};
 type TraceEvent={step:number;event:string;[key:string]:unknown};
 type Run={id:number;lab_id:string;scenario:string;parameters:Record<string,unknown>;trace:TraceEvent[];result:Record<string,unknown>;status:string;current_step:number;created_at:string};
-const labOptions=[
- {id:"physical-clock",name:"Physical clock synchronization",method:"Berkeley-style average offset",purpose:"Calculate a coordinator estimate and per-node clock corrections."},
- {id:"lamport",name:"Lamport logical clocks",method:"Scalar logical time",purpose:"Inspect local, send and receive events with causal timestamp updates."},
- {id:"snapshot",name:"Global state snapshot",method:"Chandy–Lamport teaching model",purpose:"Follow marker propagation and channel-state recording."},
- {id:"vector",name:"Vector clocks",method:"Causality and concurrency",purpose:"Inspect vector updates and the relation between events."},
- {id:"election",name:"Leader election",method:"Bully algorithm model",purpose:"Follow election, OK and coordinator announcement messages."},
- {id:"mutex",name:"Distributed mutual exclusion",method:"Ricart–Agrawala model",purpose:"Inspect requests, replies and the single-owner invariant."},
- {id:"beacon",name:"Beacon protocol",method:"Heartbeat suspicion model",purpose:"Tune missed beats and timeout, then observe suspect/unavailable/recovered states."},
- {id:"messaging",name:"Message-oriented communication",method:"RabbitMQ workflow trace",purpose:"Inspect expected API, database, broker and worker stages; verify live delivery separately."},
- {id:"stream",name:"Stream-oriented communication",method:"WebSocket lifecycle",purpose:"Inspect a connection/frame/disconnect sequence. This trace is not live telemetry."},
- {id:"scaling",name:"Scalability experiment",method:"Measured baseline vs scaled workload",purpose:"Prepare a controlled run; measurements remain blank until collected from a real runtime."}
-];
+
 const sampleOffsets=[-120,30,80,-10];
 export function ResourceCenter(){
  const [items,setItems]=useState<Resource[]>([]);
