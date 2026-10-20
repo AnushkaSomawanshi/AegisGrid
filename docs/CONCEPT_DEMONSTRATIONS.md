@@ -353,3 +353,38 @@ The UI includes:
 The deployment lab explicitly does not claim to know host Docker container or Kubernetes pod counts. Those values must be inspected using Docker/Kubernetes tooling until an explicit runtime adapter is configured. RabbitMQ TCP reachability is not proof of message publish/consume; the worker and dispatcher logs provide additional evidence.
 
 See [Local Distributed Deployment Guide](LOCAL_DISTRIBUTED_DEPLOYMENT.md) for startup, scaling, inspection, and cleanup instructions. Kubernetes manifests use local development credentials and are not a production security configuration.
+
+
+## 11. Dedicated protocol simulation workspaces
+
+The mutual-exclusion and heartbeat labs use a dedicated full-width workspace rather than the permanent ten-item catalog layout. The remaining concepts continue to use the existing workbench. The dedicated pages intentionally prioritise configuration, live model state, event-by-event execution, an event inspector and run evidence over explanatory theory cards.
+
+### Distributed mutual exclusion
+
+- Model: Ricart–Agrawala educational simulation with three processes, or two for the explicit timestamp tie-break scenario.
+- Configure: scenario preset, per-process logical request timestamps, and scenario name.
+- Execute: create persisted run, step one event at a time, run to completion, pause/resume and reset the event cursor.
+- Inspect: request creation and multicast, request receive, tuple comparison `(Lamport timestamp, process ID)`, immediate or deferred REPLY, permission completion, critical-section entry, the protected application operation, exit, and released deferred replies.
+- Evidence: full event trace, per-process clocks/state, reply sets and deferred queues, total entry order, final simulated application record and safety checks.
+- Invariant: no process enters before all required peer replies have been recorded; at most one owner may be in the critical section. The application record in the trace is an illustrative in-memory object, not a production database lock.
+- Limitation: the model is a deterministic teaching scheduler, not a crash-tolerant implementation of the protocol. It does not claim progress under process failure, lost replies or partitions.
+
+### Heartbeat / beacon failure detection
+
+- Configure: target node, heartbeat interval, timeout, network delay, loss percentage, process-crash / partition / delayed-delivery / recovery scenario, missed heartbeat count and whether to include a recovery event.
+- Observe: initial heartbeat receipt, expected heartbeat arrivals, dropped or delayed signals, timeout crossings, suspicion decisions, and recovery.
+- Inspect: event time in simulated milliseconds, last successfully received heartbeat, elapsed time since receipt, actual process state known to the simulator, observer's belief, decision reason and fault mode.
+- Evidence: configured parameters, complete event trace, final actual and observed states, timeout-based detection time, missed-signal count and false-suspicion flag.
+- Correctness: timeout suspicion is not proof of crash. A healthy process behind a partition or slow network can be suspected. The simulation labels actual state separately from what the observer can infer.
+- Limitation: packet-loss percentage is converted into a deterministic pattern for repeatability; it is not a random network model or a claim about measured infrastructure.
+
+### Validation checklist
+
+1. Create and step a simultaneous-request scenario; ensure each process state reflects the event cursor, not the final state prematurely.
+2. Verify same-timestamp requests use process ID as the deterministic secondary key.
+3. Verify every critical-section entry has a complete reply set, and no trace contains concurrent owners.
+4. Run a crash scenario with recovery disabled: actual state remains crashed and observer state reflects the timeout result.
+5. Run a partition scenario: actual process remains running while the observer can become suspected.
+6. Run a delayed heartbeat scenario where delivery crosses the timeout; suspicion is recorded before the late receipt clears it.
+7. Reset a persisted run and verify the next event repeats exactly.
+8. Treat CI and local builds as the source of test status; UI status badges alone are not execution evidence.
