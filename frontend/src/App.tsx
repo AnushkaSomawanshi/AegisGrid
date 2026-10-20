@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";\nimport type { FormEvent, ReactNode } from "react";
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowUpRight, Bell, Blocks, BookOpen,
   CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Cloud, Code2,
@@ -119,7 +119,7 @@ function App(){
   };return map[id]||{concept:"Concept",note:"No local sample available."};
  }
 
- async function createIncident(e:React.FormEvent){e.preventDefault();try{const out=await request<{incident:Incident}>("/incidents",{method:"POST",body:JSON.stringify(form)});setIncidents(old=>[out.incident,...old]);setNotice("Incident created and event recorded.");setIncidentModal(false);setForm({title:"",category:"Medical",severity:"medium",location:"Control zone",description:""});void loadData();}catch{const item:Incident={...form,id:Math.max(...incidents.map(i=>i.id),100)+1,status:"open",created_at:new Date().toISOString(),severity:form.severity as Incident["severity"]};setIncidents(old=>[item,...old]);setNotice("API is offline: incident added to this session only. Start Docker Compose to persist it.");setIncidentModal(false);}}
+ async function createIncident(e:FormEvent){e.preventDefault();try{const out=await request<{incident:Incident}>("/incidents",{method:"POST",body:JSON.stringify(form)});setIncidents(old=>[out.incident,...old]);setNotice("Incident created and event recorded.");setIncidentModal(false);setForm({title:"",category:"Medical",severity:"medium",location:"Control zone",description:""});void loadData();}catch{const item:Incident={...form,id:Math.max(...incidents.map(i=>i.id),100)+1,status:"open",created_at:new Date().toISOString(),severity:form.severity as Incident["severity"]};setIncidents(old=>[item,...old]);setNotice("API is offline: incident added to this session only. Start Docker Compose to persist it.");setIncidentModal(false);}}
  async function setIncidentStatus(item:Incident,status:Incident["status"]){try{await request(`/incidents/${item.id}`,{method:"PATCH",body:JSON.stringify({status})});void loadData();setNotice(`Incident #${item.id} updated.`);}catch{setIncidents(old=>old.map(i=>i.id===item.id?{...i,status}:i));setNotice("Session-only update: API is offline; status will not persist.");}}
  async function emitEvent(){try{await request("/events/demo",{method:"POST"});setNotice("Demo event emitted. Check the event ledger and worker logs.");void loadData();}catch{setEvents(old=>[{id:Math.max(0,...old.map(e=>e.id))+1,event_type:"dispatch.demo",source:"dashboard-local",payload:{message:"Demo event (session only)"},created_at:new Date().toISOString()},...old]);setNotice("Demo event added to the local view only; broker delivery is unavailable.");}}
  const activeIncidents=incidents.filter(i=>i.status!=="resolved");
@@ -159,7 +159,7 @@ function App(){
  </div>;
 }
 
-function PageIntro({eyebrow,title,subtitle,actions}:{eyebrow:string;title:string;subtitle:string;actions?:React.ReactNode}){
+function PageIntro({eyebrow,title,subtitle,actions}:{eyebrow:string;title:string;subtitle:string;actions?:ReactNode}){
  return <div className="page-intro"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p></div>{actions&&<div className="intro-actions">{actions}</div>}</div>;
 }
 function MetricCard({label,value,detail,icon:Icon,tone,trend}:{label:string;value:string|number;detail:string;icon:any;tone:string;trend?:string}){
