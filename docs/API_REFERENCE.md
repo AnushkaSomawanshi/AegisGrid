@@ -110,7 +110,7 @@ Returns outbox rows with stable event ID, status, attempt count, error detail an
 ### POST /api/outbox/{id}/retry
 Retries a pending message explicitly. Published rows are not published again by this endpoint. A publication confirmation can still be ambiguous if the network fails after the broker accepts the message; the consumer deduplicates by stable event ID.
 
-The event ledger row and outbox envelope are committed in one SQL transaction. Automatic background retry scheduling and dead-letter management remain future work.
+The event ledger row and outbox envelope are committed in one SQL transaction. An independent dispatcher polls pending rows and retries them. Failed deliveries remain pending; exponential backoff and a configurable poison-message dead-letter threshold remain future work.
 
 ## Experiment workbench
 
