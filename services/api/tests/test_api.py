@@ -621,3 +621,29 @@ def test_heartbeat_trace_separates_ground_truth_from_observer_belief():
     assert result["nodes"]["node-2"]["observed_state"] == "suspected"
     assert result["false_suspicion"] is True
     assert any(event["event"] == "failure.suspected" for event in run["trace"])
+
+
+def test_mutex_requests_are_not_granted_until_deferred_reply_is_delivered():
+    run = client.post("/api/experiments", json={
+        "lab_id": "mutex", "scenario": "simultaneous-requests",
+        "parameters": {"scenario": "simultaneous-requests"}
+    }).json()["run"]
+    trace = run["trace"]
+    enters = [event for event in trace if event["event"] == "critical-section.enter"]
+    assert [event["process"] for event in enters] == ["P1", "P2", "P3"]
+    assert all(len(event["processes"][event["process"]]["replies_received"]) == 2 for event in enters)
+    assert all(run["result"]["consistency_checks"].values())
+
+
+def test_heartbeat_timeout_does_not_claim_crash_for_partition():
+    run = client.post("/api/experiments", json={
+        "lab_id": "beacon", "scenario": "partition",
+        "parameters": {"scenario": "partition", "missed_beats": 4, "threshold": 3,
+                       "interval_ms": 1000, "timeout_ms": 3000, "fault_mode": "partition",
+                       "recover": False}
+    }).json()["run"]
+    result = run["result"]
+    assert result["nodes"]["node-2"]["actual_state"] == "running"
+    assert result["nodes"]["node-2"]["observed_state"] == "suspected"
+    assert result["detection_time_ms"] == 3000
+    assert result["false_suspicion"] is True
