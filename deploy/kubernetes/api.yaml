@@ -38,13 +38,13 @@ spec:
             - configMapRef:
                 name: aegisgrid-config
           env:
-            - name: DATABASE_URL
-              value: postgresql+psycopg://aegisgrid:$(POSTGRES_PASSWORD)@postgres:5432/aegisgrid
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: aegisgrid-runtime-secrets
                   key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql+psycopg://aegisgrid:$(POSTGRES_PASSWORD)@postgres:5432/aegisgrid
             - name: RABBITMQ_USER
               valueFrom:
                 secretKeyRef:
