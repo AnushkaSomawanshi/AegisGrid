@@ -756,7 +756,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             rec.update(extra)
             trace.append(rec)
 
-        # Create all requests first so the run exposes contention and the later event order.
+        # All requests are raised before arbitration, so contention and tie-breaking are visible.
         for req in requests:
             pid, stamp = req["pid"], req["timestamp"]
             states[pid]["clock"] = max(states[pid]["clock"], stamp) + 1
@@ -768,15 +768,15 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                     emit("request.sent", f"P{pid}", f"P{peer}", "REQUEST",
                          f"P{pid} multicasts REQUEST to P{peer}.", timestamp=stamp)
 
-        # Peers decide whether to reply immediately or defer to a higher-priority request.
+        # Receive each request at each peer; Ricart–Agrawala replies immediately unless
+        # the peer is requesting with a higher-priority (timestamp, process ID) pair.
         for req in ordered:
             requester = req["pid"]
             for peer in range(1, count + 1):
                 if peer == requester:
                     continue
                 states[peer]["clock"] = max(states[peer]["clock"], req["timestamp"]) + 1
-                local_key = priority.get(peer)
-                incoming_key = priority[requester]
+                local_key, incoming_key = priority.get(peer), priority[requester]
                 defer = states[peer]["state"] == "IN_CRITICAL_SECTION" or (
                     states[peer]["state"] == "REQUESTING" and local_key is not None and local_key < incoming_key)
                 emit("request.received", f"P{peer}", f"P{requester}",
@@ -785,50 +785,40 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 if defer:
                     if f"P{requester}" not in states[peer]["deferred_replies"]:
                         states[peer]["deferred_replies"].append(f"P{requester}")
-                    emit("reply.deferred", f"P{peer}", f"P{requester}",
-                         detail=f"P{peer} defers its REPLY because its own request has higher priority.",
+                    emit("reply.deferred", f"P{peer}", f"P{requester}", detail="Higher-priority local request; REPLY is deferred.",
                          incoming_key=list(incoming_key), local_key=list(local_key) if local_key else None)
                 else:
                     emit("reply.sent", f"P{peer}", f"P{requester}", "REPLY",
                          f"P{peer} replies to P{requester}.", timestamp=states[peer]["clock"])
-                    if f"P{peer}" not in states[requester]["replies_received"]:
-                        states[requester]["replies_received"].append(f"P{peer}")
-                    emit("reply.delivered", f"P{requester}", f"P{peer}",
-                         detail=f"P{requester} receives REPLY from P{peer}.")
+                    states[requester]["replies_received"].append(f"P{peer}")
+                    emit("reply.delivered", f"P{requester}", f"P{peer}", detail=f"P{requester} receives REPLY from P{peer}.")
 
-        # Requests are served in the total order. A process may enter only with all replies.
+        # Deterministic scheduler serves requests in Lamport order. A blocked request is not
+        # granted. Its outstanding deferred replies become available after the higher-priority
+        # process completes its critical section and performs the exit transition.
         for req in ordered:
             pid = req["pid"]
-            # Replies deferred by peers are released after those peers' earlier critical sections exit.
-            for peer in range(1, count + 1):
-                if peer == pid or f"P{pid}" not in states[peer]["deferred_replies"]:
-                    continue
-                if f"P{peer}" not in states[pid]["replies_received"] and (
-                    f"P{peer}" not in [f"P{x}" for x in entry_order] or pid > peer):
-                    states[peer]["deferred_replies"].remove(f"P{pid}")
-                    emit("reply.sent", f"P{peer}", f"P{pid}", "REPLY",
-                         f"P{peer} releases the deferred reply for P{pid}.")
-                    states[pid]["replies_received"].append(f"P{peer}")
-                    emit("reply.delivered", f"P{pid}", f"P{peer}",
-                         detail=f"P{pid} receives a deferred REPLY.")
             missing = [peer for peer in range(1, count + 1)
                        if peer != pid and f"P{peer}" not in states[pid]["replies_received"]]
             if missing:
-                emit("request.blocked", f"P{pid}",
-                     detail="The request cannot enter until every peer REPLY is received.",
+                emit("request.blocked", f"P{pid}", detail="Waiting for deferred peer replies before entry.",
                      missing_replies=[f"P{x}" for x in missing])
-                # In this offline model, later ordered requests cannot overtake a blocked earlier request.
-                for peer in missing:
-                    peer_id = int(peer)
-                    if f"P{pid}" in states[peer_id]["deferred_replies"]:
-                        states[peer_id]["deferred_replies"].remove(f"P{pid}")
-                        emit("reply.sent", f"P{peer_id}", f"P{pid}", "REPLY",
-                             f"P{peer_id} releases the deferred reply after the earlier request's exit.")
-                        states[pid]["replies_received"].append(peer)
-                        emit("reply.delivered", f"P{pid}", f"P{peer_id}", detail="Deferred REPLY delivered.")
+                # Requests are serviced in priority order, so a higher-priority process's exit
+                # flushes its deferred queue and delivers permission to the waiting process.
+                for peer in range(1, count + 1):
+                    if peer == pid or f"P{pid}" not in states[peer]["deferred_replies"]:
+                        continue
+                    states[peer]["deferred_replies"].remove(f"P{pid}")
+                    emit("reply.sent", f"P{peer}", f"P{pid}", "REPLY",
+                         f"P{peer} flushes its deferred REPLY to P{pid}.")
+                    if f"P{peer}" not in states[pid]["replies_received"]:
+                        states[pid]["replies_received"].append(f"P{peer}")
+                    emit("reply.delivered", f"P{pid}", f"P{peer}", detail=f"P{pid} receives deferred permission.")
                 missing = [peer for peer in range(1, count + 1)
                            if peer != pid and f"P{peer}" not in states[pid]["replies_received"]]
                 if missing:
+                    emit("request.blocked", f"P{pid}", detail="Request remains blocked; a peer reply is still outstanding.",
+                         missing_replies=[f"P{x}" for x in missing])
                     continue
             states[pid]["state"] = "READY"
             emit("permission.complete", f"P{pid}", detail="All required peer replies received.",
@@ -847,7 +837,6 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             else:
                 record["reservation"], operation = "RESERVED", "Inventory reserved for INC-1042"
             emit("application.operation", owner, detail=operation)
-            # Flush this process's deferred replies as part of its exit transition.
             deferred = list(states[pid]["deferred_replies"])
             owner = None
             states[pid]["state"], states[pid]["request_timestamp"] = "RELEASED", None
@@ -859,6 +848,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 if f"P{pid}" not in states[target_id]["replies_received"]:
                     states[target_id]["replies_received"].append(f"P{pid}")
                 emit("reply.delivered", target, f"P{pid}", detail=f"{target} receives deferred permission.")
+
         checks = {
             "maximum_concurrent_owners_is_one": max_owners <= 1,
             "all_processes_entered_once": len(entry_order) == count and len(set(entry_order)) == count,
