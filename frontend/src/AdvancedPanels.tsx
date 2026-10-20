@@ -59,6 +59,34 @@ export function ResourceCenter(){
 
 
 
+
+type ForensicIncident={id:number;title:string;status:string};
+type ForensicEvent={id:number;event_type:string;source:string;payload:Record<string,unknown>;created_at:string};
+type ForensicReport={incident:ForensicIncident;nodes:{id:string;kind:string;label:string}[];edges:{from:string;to:string;relation:string}[];events:ForensicEvent[];note:string};
+export function ForensicsConsole(){
+ const [incidents,setIncidents]=useState<ForensicIncident[]>([]);
+ const [selected,setSelected]=useState("");
+ const [report,setReport]=useState<ForensicReport|null>(null);
+ const [error,setError]=useState("");
+ const [busy,setBusy]=useState(false);
+ const loadIncidents=useCallback(async()=>{try{const out=await call<{items:ForensicIncident[]}>("/incidents?limit=100");setIncidents(out.items);if(!selected&&out.items[0])setSelected(String(out.items[0].id));}catch(e){setError(e instanceof Error?e.message:"Incident list unavailable");}},[selected]);
+ useEffect(()=>{void loadIncidents();},[loadIncidents]);
+ async function inspect(){if(!selected)return;setBusy(true);setError("");try{const out=await call<ForensicReport>("/forensics/"+selected);setReport(out);}catch(e){setError(e instanceof Error?e.message:"Forensics query failed");}finally{setBusy(false);}}
+ useEffect(()=>{if(selected)void inspect();},[selected]);
+ const exportReport=()=>{if(report)navigator.clipboard?.writeText(JSON.stringify(report,null,2));};
+ return <div className="advanced-page">
+  <div className="page-intro"><div><div className="eyebrow">INCIDENT RESPONSE / CAUSAL FORENSICS</div><h1>Incident forensics</h1><p>Reconstruct the persisted event timeline for an incident, inspect each event payload and export the current report for review.</p></div><div className="intro-actions"><button className="btn-secondary" disabled={!report} onClick={exportReport}><Save size={15}/> Copy report JSON</button></div></div>
+  <div className="connection-banner connection-demo"><span className="banner-icon"><Workflow size={17}/></span><div><b>Chronological reconstruction, not a causality proof</b><span>Events are matched using incident/correlation identifiers and shown in persisted order. Full happens-before edges require every producer and consumer to propagate causation metadata.</span></div><span className="banner-mode">TRACE EVIDENCE</span></div>
+  {error&&<div className="connection-banner connection-demo"><AlertTriangle size={17}/><div><b>Forensics query failed</b><span>{error}</span></div></div>}
+  <section className="panel runtime-checks"><div className="section-head"><div><h3>Incident selection</h3><span>Select a persisted incident to reconstruct</span></div><Database size={17}/></div><div className="forensics-select"><label className="advanced-field">Incident<select value={selected} onChange={e=>setSelected(e.target.value)}>{incidents.map(i=><option key={i.id} value={i.id}>#{i.id} · {i.title} · {i.status}</option>)}</select></label><button className="btn-primary" disabled={!selected||busy} onClick={()=>void inspect()}><Activity size={15}/>{busy?"Inspecting…":"Rebuild trace"}</button></div>{incidents.length===0&&<div className="empty-state">No persisted incidents found. Create an incident in Incident response first.</div>}</section>
+  {report&&<><div className="metric-grid"><div className="metric-card"><div className="metric-top"><span>Incident</span><div className="metric-icon tone-blue"><Activity size={18}/></div></div><div className="metric-value">#{report.incident.id}</div><div className="metric-foot"><span>{report.incident.status}</span></div></div><div className="metric-card"><div className="metric-top"><span>Matched events</span><div className="metric-icon tone-violet"><Workflow size={18}/></div></div><div className="metric-value">{report.events.length}</div><div className="metric-foot"><span>Persisted payload matches</span></div></div><div className="metric-card"><div className="metric-top"><span>Graph nodes</span><div className="metric-icon tone-cyan"><Network size={18}/></div></div><div className="metric-value">{report.nodes.length}</div><div className="metric-foot"><span>Incident and event nodes</span></div></div><div className="metric-card"><div className="metric-top"><span>Relations</span><div className="metric-icon tone-orange"><GitBranchIcon/></div></div><div className="metric-value">{report.edges.length}</div><div className="metric-foot"><span>Chronological adjacency edges</span></div></div></div>
+   <div className="dashboard-grid"><section className="panel feed-panel"><div className="section-head"><div><h3>Event timeline</h3><span>Ascending persisted event ID order</span></div><Clock3 size={17}/></div><div className="event-feed trace-feed">{report.events.map((event,i)=><div className="feed-row trace-row" key={event.id}><div className="feed-dot feed-blue"/><div className="feed-copy"><b>{event.event_type}</b><span>{event.source} · {event.created_at}</span><small>{JSON.stringify(event.payload)}</small></div><code>#{event.id}</code></div>)}</div>{report.events.length===0&&<div className="empty-state">No matching event payloads were found for this incident.</div>}</section>
+    <section className="panel runtime-checks"><div className="section-head"><div><h3>Reconstruction graph</h3><span>Chronological edges</span></div><Workflow size={17}/></div><div className="forensic-graph">{report.nodes.map((node,i)=><div className="forensic-node" key={node.id}><span>{String(i+1).padStart(2,"0")}</span><div><b>{node.label}</b><small>{node.kind} · {node.id}</small></div>{i<report.nodes.length-1&&<ChevronRight size={17}/>}</div>)}</div><div className="runtime-caution"><AlertTriangle size={15}/><span>{report.note}</span></div></section></div>
+  </>}
+ </div>;
+}
+function GitBranchIcon(){return <Workflow size={18}/>}
+
 type TelemetryFrame={type:string;mode?:string;sequence?:number;at?:string;load_pct?:number;queue_depth?:number;node?:string;message?:string};
 export function StreamMonitor(){
  const [connected,setConnected]=useState(false);
