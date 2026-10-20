@@ -359,6 +359,104 @@ def messaging_deliveries(limit: int = 100):
         rows = conn.execute("SELECT * FROM broker_deliveries ORDER BY consumed_at DESC LIMIT %s", (limit,)).fetchall()
     return [{**dict(x), "consumed_at": x["consumed_at"].isoformat()} for x in rows]
 
+def load_forensics_graph(limit: int = 200):
+    limit = max(1, min(limit, 500))
+    with connect_db() as conn:
+        rows = conn.execute(
+            "SELECT id,trace_id,service,event_type,payload,happened_at FROM event_ledger ORDER BY happened_at ASC LIMIT %s",
+            (limit,)
+        ).fetchall()
+    nodes=[]
+    for row in rows:
+        raw=row["payload"]
+        if isinstance(raw,str):
+            try: raw=json.loads(raw)
+            except json.JSONDecodeError: raw={}
+        payload=raw.get("payload",{}) if isinstance(raw,dict) else {}
+        if not isinstance(payload,dict): payload={}
+        process=payload.get("process_id") or payload.get("from") or payload.get("source_process") or payload.get("initiator")
+        if process is None and payload.get("process") is not None: process=payload.get("process")
+        node={
+            "id":row["id"],"trace_id":row["trace_id"],"service":row["service"],
+            "event_type":row["event_type"],"payload":raw,
+            "process_id":process,"happened_at":row["happened_at"].isoformat(),
+            "message_id":payload.get("message_id"),
+            "message_ref":payload.get("id") if "sent" in row["event_type"].lower() else None
+        }
+        nodes.append(node)
+    edges=[]
+    process_events=defaultdict(list)
+    sent_by_message={}
+    for node in nodes:
+        if node["process_id"]:
+            process_events[str(node["process_id"])].append(node)
+        mid=node.get("message_id")
+        if mid and any(word in node["event_type"].lower() for word in ("sent","send")):
+            sent_by_message[str(mid)]=node
+        elif node.get("message_ref"):
+            sent_by_message[str(node["message_ref"])]=node
+    for pid,events in process_events.items():
+        events.sort(key=lambda x:x["happened_at"])
+        for earlier,later in zip(events,events[1:]):
+            edges.append({"from":earlier["id"],"to":later["id"],"kind":"process-order","process_id":pid,"evidence":"Recorded order within same process"})
+    for node in nodes:
+        mid=node.get("message_id")
+        if mid and any(word in node["event_type"].lower() for word in ("received","receive")):
+            source=sent_by_message.get(str(mid))
+            if source and source["id"]!=node["id"]:
+                edges.append({"from":source["id"],"to":node["id"],"kind":"message","message_id":str(mid),"evidence":"Matching recorded message identifier"})
+    return nodes,edges
+
+@app.get("/api/forensics/graph")
+def forensics_graph(limit: int = 200):
+    try:
+        nodes,edges=load_forensics_graph(limit)
+    except Exception as exc:
+        raise HTTPException(503, f"Could not load event graph: {exc}")
+    return {"nodes":nodes,"edges":edges,"method":"Recorded process identity, event insertion order and explicit matching message IDs","caveat":"Rows with missing process IDs or message IDs do not produce inferred edges. Database insertion order is used as a local event order proxy; use per-process sequence numbers for rigorous concurrent-write ordering."}
+
+@app.get("/api/forensics/causality")
+def forensics_causality(event_a: str, event_b: str, limit: int = 200):
+    try:
+        nodes,edges=load_forensics_graph(limit)
+    except Exception as exc:
+        raise HTTPException(503, f"Could not load event graph: {exc}")
+    ids={node["id"] for node in nodes}
+    if event_a not in ids or event_b not in ids:
+        raise HTTPException(404,"One or both event IDs are not present in the current event graph window")
+    if event_a==event_b:
+        return {"relation":"SAME_EVENT","path":[event_a],"edges":[]}
+    outgoing=defaultdict(list)
+    for edge in edges:
+        outgoing[edge["from"]].append(edge)
+    queue=deque([(event_a,[])])
+    seen={event_a}
+    while queue:
+        current,path=queue.popleft()
+        if current==event_b:
+            return {"relation":"A_BEFORE_B","path":[event_a]+[edge["to"] for edge in path],"edges":path}
+        for edge in outgoing[current]:
+            target=edge["to"]
+            if target not in seen:
+                seen.add(target)
+                queue.append((target,path+[edge]))
+    reverse=defaultdict(list)
+    for edge in edges:
+        reverse[edge["to"]].append(edge)
+    queue=deque([(event_b,[])])
+    seen={event_b}
+    while queue:
+        current,path=queue.popleft()
+        if current==event_a:
+            reverse_path=list(reversed(path))
+            return {"relation":"B_BEFORE_A","path":[event_b]+[edge["from"] for edge in path],"edges":reverse_path}
+        for edge in reverse[current]:
+            source=edge["from"]
+            if source not in seen:
+                seen.add(source)
+                queue.append((source,path+[edge]))
+    return {"relation":"NO_CAUSAL_PATH_ESTABLISHED","path":[],"edges":[],"caveat":"Missing logs or process identifiers may prevent reconstruction; lack of a path is not proof of concurrency."}
+
 @app.get("/api/events")
 def get_events(limit: int=100):
     limit=max(1,min(limit,500))
