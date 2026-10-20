@@ -104,7 +104,7 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   }
   function updateOffset(id: string, value: number) {
     setNodes(previous => previous.map(n => n.id === id ? { ...n, offset: value } : n));
-    setStage("ready"); setTrace([]); setSelectedEvent(null);
+    setStage("ready"); setRunTarget(null); setTrace([]); setSelectedEvent(null);
     setNotice("Clock offset updated. Start a new run to capture the changed input.");
   }
   const statusLabel = completed ? "VERIFIED" : stage === "ready" ? "READY" : "RUNNING";
@@ -119,8 +119,8 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
       {showSettings && <div className="pcl-config-grid">
         <label className="pcl-field"><span>Clock scenario</span><select value={preset} onChange={e => configurePreset(e.target.value as Preset)}><option value="drift">Uneven drift</option><option value="disagreement">High disagreement</option><option value="aligned">Nearly aligned</option></select><small>Preset loads a repeatable set of synthetic offsets.</small></label>
         <label className="pcl-field"><span>Coordinator node</span><select value="n1" disabled><option value="n1">Node 01 · Incident intake</option></select><small>Coordinator selection is fixed in this version.</small></label>
-        <label className="pcl-field"><span>Network delay model <b>{delayModel} ms</b></span><input type="range" min="0" max="100" step="5" value={delayModel} onChange={e => { setDelayModel(Number(e.target.value)); setStage("ready"); setTrace([]); }}/><small>Used as the scenario's configured delay context; no unimplemented compensation is implied.</small></label>
-        <label className="pcl-field"><span>Maximum correction magnitude <b>{maxCorrection} ms</b></span><input type="range" min="25" max="250" step="25" value={maxCorrection} onChange={e => { setMaxCorrection(Number(e.target.value)); setStage("ready"); setTrace([]); }}/><small>Bounds each signed correction to avoid an unbounded jump.</small></label>
+        <label className="pcl-field"><span>Network delay model <b>{delayModel} ms</b></span><input type="range" min="0" max="100" step="5" value={delayModel} onChange={e => { setDelayModel(Number(e.target.value)); setStage("ready"); setRunTarget(null); setTrace([]); }}/><small>Used as the scenario's configured delay context; no unimplemented compensation is implied.</small></label>
+        <label className="pcl-field"><span>Maximum correction magnitude <b>{maxCorrection} ms</b></span><input type="range" min="25" max="250" step="25" value={maxCorrection} onChange={e => { setMaxCorrection(Number(e.target.value)); setStage("ready"); setRunTarget(null); setTrace([]); }}/><small>Bounds each signed correction to avoid an unbounded jump.</small></label>
       </div>}
       <div className="pcl-control-row"><div className="pcl-control-copy"><b>Execution controls</b><span>{stage === "ready" ? "Ready to begin a new round" : "Stage " + progress + " of 5 · " + (stages.find(s => s.id === stage)?.title || "Ready")}</span></div><button className="pcl-btn primary" onClick={start}><Play size={15}/> {stage === "ready" ? "Start new run" : "Restart run"}</button><button className="pcl-btn secondary" disabled={stage === "verify"} onClick={advance}><StepForward size={15}/> {stage === "ready" ? "Begin / next stage" : stage === "apply" ? "Verify results" : "Next stage"}</button><button className="pcl-btn secondary" onClick={() => reset()}><RotateCcw size={14}/> Reset scenario</button></div>
     </section>
