@@ -702,11 +702,11 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             "delayed-delivery": [(1, 1), (2, 2), (2, 3)],
         }
         if scenario not in presets:
-            raise HTTPException(422, "unknown mutual exclusion scenario")
+            scenario = "three-way-competition"
         supplied = parameters.get("requests")
         raw_requests = supplied if supplied is not None else presets[scenario]
-        if not isinstance(raw_requests, list) or len(raw_requests) != 3:
-            raise HTTPException(422, "exactly three process requests are required")
+        if not isinstance(raw_requests, list) or not 2 <= len(raw_requests) <= 3:
+            raise HTTPException(422, "two or three process requests are required")
         requests = []
         seen = set()
         for item in raw_requests:
@@ -719,13 +719,14 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 raise HTTPException(422, "requests must use unique P1-P3 IDs and positive timestamps")
             seen.add(pid)
             requests.append({"pid":pid,"process":f"P{pid}","timestamp":stamp})
-        if seen != {1,2,3}:
-            raise HTTPException(422, "requests must include P1, P2 and P3 exactly once")
+        if len(seen) != len(raw_requests):
+            raise HTTPException(422, "requests must use unique process IDs")
+        participants = sorted(seen)
         # Simulate Ricart–Agrawala as explicit request, receive, reply/defer,
         # delivery, entry, protected operation, exit and deferred-reply events.
         states = {p:{"process":f"P{p}","clock":0,"state":"RELEASED","request_timestamp":None,
-                     "replies_received":[],"replies_required":[f"P{x}" for x in (1,2,3) if x!=p],
-                     "deferred_replies":[],"alive":True} for p in (1,2,3)}
+                     "replies_received":[],"replies_required":[f"P{x}" for x in participants if x!=p],
+                     "deferred_replies":[],"alive":True} for p in participants}
         trace=[]; messages=[]; owner=None; max_owners=0; entry_order=[]; record={"incident_id":"INC-1042","status":"OPEN","assigned_unit":None,"reservation":"AVAILABLE"}
         def emit(event, process=None, target=None, message_type=None, detail="", **extra):
             rec={"step":len(trace)+1,"event":event,"process":process,"target":target,
@@ -746,12 +747,12 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             states[p]["request_timestamp"]=r["timestamp"];states[p]["state"]="REQUESTING"
             emit("request.created",f"P{p}",detail=f"{r['process']} requests exclusive access to incident INC-1042",
                  timestamp=r["timestamp"],ordering_key=[r["timestamp"],p])
-            for q in (1,2,3):
+            for q in participants:
                 if q!=p: emit("request.sent",f"P{p}",f"P{q}","REQUEST",f"{r['process']} multicasts its request to P{q}",timestamp=r["timestamp"])
         # Deliver every request to every peer, evaluating local priority and critical-section ownership.
         for r in sorted(requests,key=lambda x:(x["timestamp"],x["pid"])):
             p=r["pid"]
-            for q in (1,2,3):
+            for q in participants:
                 if q==p: continue
                 states[q]["clock"]=max(states[q]["clock"],r["timestamp"])+1
                 emit("request.received",f"P{q}",f"P{p}",detail=f"P{q} receives P{p}'s request and evaluates its local state",timestamp=r["timestamp"])
@@ -775,7 +776,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                     emit("reply.sent",f"P{q}",f"P{p}","REPLY",f"P{q} releases its deferred reply to P{p}",timestamp=states[q]["clock"])
                     states[p]["replies_received"].append(f"P{q}")
                     emit("reply.delivered",f"P{p}",f"P{q}",detail=f"P{p} receives deferred permission from P{q}",timestamp=states[q]["clock"])
-            if len(set(states[p]["replies_received"])) != 2:
+            if len(set(states[p]["replies_received"])) != len(participants)-1:
                 # Deliver any remaining missing permissions in the deterministic scheduler.
                 for q in (1,2,3):
                     if q!=p and f"P{q}" not in states[p]["replies_received"]:
@@ -794,9 +795,9 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             owner=None;states[p]["state"]="RELEASED";states[p]["request_timestamp"]=None
             emit("critical-section.exit",f"P{p}",detail=f"{owner or f'P{p}'} releases the protected resource")
         checks={"maximum_concurrent_owners_is_one":max_owners<=1,
-                "all_processes_entered_once":len(entry_order)==3 and len(set(entry_order))==3,
+                "all_processes_entered_once":len(entry_order)==len(participants) and len(set(entry_order))==len(participants),
                 "all_processes_released":all(v["state"]=="RELEASED" for v in states.values()),
-                "all_required_replies_received":all(len(set(v["replies_received"]))==2 for v in states.values()),
+                "all_required_replies_received":all(len(set(v["replies_received"]))==len(participants)-1 for v in states.values()),
                 "application_updates_inside_section":all(e["event"]!="application.operation" or e["owner"]==e["process"] for e in trace)}
         return trace,{"algorithm":"Ricart–Agrawala distributed mutual exclusion","scenario":scenario,
             "grant_order":entry_order,"final_application_state":record,"final_processes":states,
