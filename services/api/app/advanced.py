@@ -305,43 +305,125 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         }
     if lab_id == "snapshot":
         processes = parameters.get("processes", ["P1", "P2", "P3"])
-        initiator = str(parameters.get("initiator", "P1"))
-        messages = parameters.get("messages_in_transit", [{"from":"P2","to":"P3","message":"dispatch.updated #104"}])
-        if not isinstance(processes, list) or len(processes) < 2 or len(processes) > 10 or any(not isinstance(p, str) or not p for p in processes) or len(set(processes)) != len(processes):
+        initiator = parameters.get("initiator", "P1")
+        scenario = str(parameters.get("scenario", ""))
+        message_count = parameters.get("message_count", 1)
+        if scenario == "empty":
+            message_count = 0
+        if scenario == "multiple":
+            message_count = 2
+        if not isinstance(processes, list) or not 2 <= len(processes) <= 10 or any(not isinstance(p, str) or not p.strip() or len(p) > 40 for p in processes) or len(set(processes)) != len(processes):
             raise HTTPException(422, "processes must contain 2 to 10 unique process IDs")
-        processes = [str(p) for p in processes]
+        processes = [p.strip() for p in processes]
         if initiator not in processes:
             raise HTTPException(422, "initiator must be a member of processes")
-        if not isinstance(messages, list) or len(messages) > 100:
-            raise HTTPException(422, "messages_in_transit must be a list of at most 100 messages")
-        trace = [{"step":1,"event":"process.state_recorded","process":initiator,"detail":"Initiator records its local state"}]
-        for target in processes:
-            if target != initiator:
-                trace.append({"step":len(trace)+1,"event":"marker.sent","process":initiator,"to":target,"channel":initiator+"->"+target})
+        if isinstance(message_count, bool) or not isinstance(message_count, int) or not 0 <= message_count <= 20:
+            raise HTTPException(422, "message_count must be an integer between 0 and 20")
+        if len(processes) < 3 and message_count:
+            raise HTTPException(422, "in-transit message presets require at least three processes")
+        channels = {f"{a}->{b}": {"channel": f"{a}->{b}", "from": a, "to": b,
+                    "status": "not-recording", "messages": [], "started_at_step": None,
+                    "closed_at_step": None} for a in processes for b in processes if a != b}
+        process_states: dict[str, dict[str, Any]] = {}
+        trace: list[dict[str, Any]] = []
+        marker_sends: dict[tuple[str, str], int] = {}
+        def add(event: str, **fields: Any) -> dict[str, Any]:
+            item = {"step": len(trace) + 1, "event": event, "execution_mode": "simulation", **fields}
+            trace.append(item)
+            return item
+        add("snapshot.started", process=initiator, detail=f"{initiator} initiates a new global snapshot.")
+        process_states[initiator] = {"process": initiator, "state_label": "incident queue + dispatch cursor", "recorded_at_step": 1, "markers_received": 0}
+        add("process.state_recorded", process=initiator, state_label=process_states[initiator]["state_label"],
+            detail="Initiator records its local state before sending any marker.")
         for target in processes:
             if target == initiator:
                 continue
-            trace.append({"step":len(trace)+1,"event":"marker.received","process":target,"from":initiator,
-                          "detail":"First marker records local state"})
-            trace.append({"step":len(trace)+1,"event":"process.state_recorded","process":target,"detail":"Local state captured"})
-            for destination in processes:
-                if destination != target:
-                    trace.append({"step":len(trace)+1,"event":"marker.sent","process":target,"to":destination,
-                                  "channel":target+"->"+destination})
-        captured = []
-        for message in messages:
-            if not isinstance(message, dict) or str(message.get("from")) not in processes or str(message.get("to")) not in processes:
-                raise HTTPException(422, "each in-transit message must use process IDs from the scenario")
-            captured.append({"from":str(message["from"]),"to":str(message["to"]),"message":str(message.get("message","sample message"))})
-            trace.append({"step":len(trace)+1,"event":"channel.message_recorded","channel":str(message["from"])+"->"+str(message["to"]),
-                          "message":str(message.get("message","sample message"))})
-        for target in processes:
-            if target != initiator:
-                trace.append({"step":len(trace)+1,"event":"channel.recording.closed","process":target,
-                              "detail":"Marker arrived on each recorded incoming channel"})
-        return trace, {"algorithm":"Chandy–Lamport teaching model","initiator":initiator,"processes":processes,
-                       "process_states_recorded":len(processes),"messages_in_transit_recorded":len(captured),
-                       "captured_messages":captured,"consistent_cut":True,"execution_mode":"simulation"}
+            marker_sends[(initiator, target)] = len(trace) + 1
+            add("marker.sent", process=initiator, sender=initiator, to=target, channel=f"{initiator}->{target}",
+                message_id=f"MK-{initiator}-{target}", detail="Marker sent on outgoing channel.")
+        # P3 sees the initiator marker first, opening P2 -> P3 recording before M1 is delivered.
+        delivery_order = [p for p in processes if p != initiator]
+        if len(processes) >= 3:
+            delivery_order = [processes[2], processes[1]] + [p for p in processes if p not in {initiator, processes[2], processes[1]}]
+        for target in delivery_order:
+            source = initiator
+            channel_name = f"{source}->{target}"
+            add("marker.received", process=target, sender=source, channel=channel_name,
+                message_id=f"MK-{source}-{target}", detail="First marker records this process's local state.")
+            process_states[target] = {"process": target, "state_label": "resource queue + in-memory assignments" if target == "P2" else "inventory cache + pending updates",
+                                      "recorded_at_step": len(trace), "markers_received": 1}
+            add("process.state_recorded", process=target, state_label=process_states[target]["state_label"],
+                detail="Local process state captured at the first marker.")
+            for other in processes:
+                if other == target:
+                    continue
+                ch = channels[f"{other}->{target}"]
+                if other == source:
+                    ch["status"] = "closed"
+                    ch["started_at_step"] = len(trace) - 1
+                    ch["closed_at_step"] = len(trace)
+                else:
+                    ch["status"] = "recording"
+                    ch["started_at_step"] = len(trace) + 1
+                    add("channel.recording.started", process=target, channel=ch["channel"], sender=other, receiver=target,
+                        detail="Record application messages on this incoming channel until its marker arrives.")
+            # On the P3 recording window, deliver app messages before the P2 marker.
+            if target == processes[2] and message_count:
+                for index in range(message_count):
+                    message_id = f"M{index + 1}"
+                    payload = "dispatch.updated #104" if index == 0 else f"inventory.delta #{104 + index}"
+                    ch = channels[f"{processes[1]}->{target}"]
+                    message = {"message_id": message_id, "from": processes[1], "to": target, "payload": payload,
+                               "delivery_step": len(trace) + 1}
+                    if ch["status"] == "recording":
+                        ch["messages"].append(message)
+                        add("channel.message_recorded", channel=ch["channel"], process=target, sender=processes[1],
+                            message_id=message_id, message=payload, reason="Delivered after recording began and before the channel marker arrived.",
+                            detail="Application message is included in this channel's recorded state.")
+                    else:
+                        add("application.message.delivered", channel=ch["channel"], process=target, sender=processes[1],
+                            message_id=message_id, message=payload, reason="Channel was not recording at delivery.")
+            # The newly captured process sends markers on every outgoing channel.
+            for other in processes:
+                if other == target:
+                    continue
+                marker_sends[(target, other)] = len(trace) + 1
+                add("marker.sent", process=target, sender=target, to=other, channel=f"{target}->{other}",
+                    message_id=f"MK-{target}-{other}", detail="First-marker rule: record local state, then send markers.")
+        # Deliver all remaining markers; marker on a channel closes that channel's recording.
+        for (source, target), sent_step in list(marker_sends.items()):
+            if source == initiator and target in process_states and target != processes[2]:
+                pass
+            ch = channels[f"{source}->{target}"]
+            if ch["status"] == "recording":
+                add("marker.received", process=target, sender=source, channel=ch["channel"],
+                    message_id=f"MK-{source}-{target}", detail="Marker ends recording for this directed channel.")
+                ch["status"] = "closed"
+                ch["closed_at_step"] = len(trace)
+                add("channel.recording.closed", process=target, channel=ch["channel"],
+                    captured_messages=len(ch["messages"]), detail="Channel state is complete; subsequent messages are not included.")
+            elif ch["status"] == "not-recording":
+                ch["status"] = "closed"
+                ch["closed_at_step"] = len(trace) + 1
+                add("marker.received", process=target, sender=source, channel=ch["channel"],
+                    message_id=f"MK-{source}-{target}", detail="Marker arrived before recording was opened; channel state is empty.")
+                add("channel.recording.closed", process=target, channel=ch["channel"], captured_messages=0,
+                    detail="Channel state is empty for this snapshot.")
+        captured = [message for ch in channels.values() for message in ch["messages"]]
+        all_recorded = len(process_states) == len(processes)
+        all_closed = all(ch["status"] == "closed" for ch in channels.values())
+        consistent = all_recorded and all_closed
+        add("snapshot.completed", process=initiator, process_count=len(process_states), channel_count=len(channels),
+            captured_message_count=len(captured), consistent_cut=consistent,
+            detail="Snapshot assembly checks every local process state and every directed channel state.")
+        return trace, {"algorithm": "Chandy–Lamport-style global snapshot", "initiator": initiator, "processes": processes,
+                       "process_states": process_states, "channel_states": list(channels.values()),
+                       "process_states_recorded": len(process_states), "messages_in_transit_recorded": len(captured),
+                       "captured_messages": captured, "consistent_cut": consistent,
+                       "consistency_checks": {"consistent_cut": consistent, "all_processes_recorded": all_recorded,
+                         "all_channels_closed": all_closed, "summary": "Every process state recorded and every directed channel recording closed." if consistent else "Snapshot incomplete."},
+                       "execution_mode": "simulation",
+                       "note": "Channel messages are derived from the deterministic send/delivery/marker schedule, not supplied as a pre-labelled final in-transit list."}
     if lab_id == "vector":
         trace = []
         p1 = [1, 0, 0]
