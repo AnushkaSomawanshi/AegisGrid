@@ -27,10 +27,10 @@ Visualise interval, last beacon, missed signals, timeout and suspected/recovered
 Use real RabbitMQ. Expose event ID, correlation ID, routing key, queue/consumer state, acknowledgements, retries and dead-letter flow. Initial API publishes to a durable topic exchange; consumer queues and inspectable delivery lifecycle remain to be completed.
 
 ## 9. Stream-oriented communication
-Use a real WebSocket for continuous telemetry or pushed events. Show connection status, sequence IDs, payloads, interruption/reconnection, latency and missing samples. Current foundation broadcasts event notifications; telemetry generator and stream metrics remain to be completed.
+Use a real WebSocket for continuous generated telemetry. Show connection state, sequence IDs and sample payloads. Payload values are simulated; the WebSocket transport is real. Recovery semantics, measured latency and missing-sample analysis remain to be added.
 
 ## 10. Event forensics / happened-before
-Show process lanes, local-order edges, message edges and event inspector. Derive causal paths from recorded edges. Do not infer causality from Lamport integers alone or treat missing paths as proof of concurrency if logs may be incomplete.
+Show process lanes, local-order edges, message edges and event inspector. The Forensics screen builds a graph from persisted ledger events and exposes an event-pair causal-path endpoint. It uses explicit message IDs and process identity when available. It does not infer causality from Lamport integers alone or treat missing paths as proof of concurrency if logs may be incomplete. Current local process ordering is a database insertion-order proxy; robust concurrent-write ordering needs per-process sequence numbers in the event schema.
 
 ## 11. Docker
 Run full local stack using Compose. Inspect real containers, health and logs; demonstrate end-to-end incident and event flow. Do not expose Docker socket to frontend.
