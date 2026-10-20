@@ -316,3 +316,29 @@ The ledger records event ID, process, event type, previous clock, message timest
 ### Interpretation and limits
 
 Lamport timestamps can establish a consistent direction for causally related events but cannot prove that two unrelated events are concurrent in real time, and a scalar timestamp does not fully identify concurrency. This is a deterministic teaching simulation: it does not instrument the actual API, database, worker or broker, and it does not claim wall-clock timestamps or live distributed-process behavior.
+
+
+## Heartbeat Suspicion Model — Cluster Health Execution Studio
+
+The Beacon lab now opens a dedicated Heartbeat Suspicion Execution Studio for the AegisGrid Incident, Dispatch and Inventory services. This is a deterministic simulation, not live service telemetry.
+
+### Application scenario
+
+- P1 — Incident Service
+- P2 — Dispatch Service
+- P3 — Inventory Service
+- P2 is the default monitored service. P1 and P3 continue to emit heartbeats so the UI can distinguish a node-specific issue from a total cluster outage.
+
+### UI and execution controls
+
+The studio includes five scenario presets (normal operation, delayed heartbeat, heartbeat loss, failure and recovery, intermittent network), configurable heartbeat interval and timeout, monitored-node selection, step/run/pause/resume/reset, service health cards, heartbeat event timeline, event inspector, final detector evidence and JSON export. The event cursor displays process state snapshots; pending events are not presented as already applied.
+
+### Detector behavior
+
+The model records heartbeat receive/send events, elapsed silence, missed deadlines, suspicion transitions, timeout/unavailable transitions and recovery events. The current suspicion indicator is a transparent normalized elapsed-silence measure capped at 1.0, not a statistically calibrated accrual failure detector. A timeout is a detector decision under configured parameters, not proof of a crashed process: packet loss, scheduling delays and network partitions can produce the same evidence.
+
+Parameters are validated for bounded interval, timeout, miss count, delay and known node IDs. Final results include scenario, timing configuration, final node state, active alert, execution mode and an explicit simulation disclaimer.
+
+### Validation
+
+Tests cover all scenario presets, expected detector evidence, recovery, unaffected peer nodes and invalid configuration. The existing `/api/beacons/simulate` endpoint remains available for compatibility.
