@@ -117,3 +117,22 @@ def test_clock_lab_rejects_malformed_offsets():
         "lab_id": "physical-clock", "scenario": "invalid", "parameters": {"offsets": []}
     })
     assert response.status_code == 422
+
+
+def test_experiment_pause_resume_and_simulated_fault():
+    created = client.post("/api/experiments", json={
+        "lab_id": "lamport", "scenario": "pause-fault-resume", "parameters": {}
+    }).json()["run"]
+    run_id = created["id"]
+    paused = client.post(f"/api/experiments/{run_id}/pause")
+    assert paused.status_code == 200
+    blocked = client.post(f"/api/experiments/{run_id}/step")
+    assert blocked.status_code == 409
+    resumed = client.post(f"/api/experiments/{run_id}/resume")
+    assert resumed.status_code == 200
+    injected = client.post(f"/api/experiments/{run_id}/inject-failure", json={
+        "fault_type": "process-unavailable", "target": "P2"
+    })
+    assert injected.status_code == 200
+    assert injected.json()["event"]["event"] == "fault.injected"
+    assert injected.json()["run"]["result"]["injected_fault"]["execution_mode"] == "simulation"
