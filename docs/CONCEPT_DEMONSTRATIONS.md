@@ -316,3 +316,24 @@ The ledger records event ID, process, event type, previous clock, message timest
 ### Interpretation and limits
 
 Lamport timestamps can establish a consistent direction for causally related events but cannot prove that two unrelated events are concurrent in real time, and a scalar timestamp does not fully identify concurrency. This is a deterministic teaching simulation: it does not instrument the actual API, database, worker or broker, and it does not claim wall-clock timestamps or live distributed-process behavior.
+
+
+## Message-Oriented and Stream-Oriented Communication — Execution Studio
+
+The Message and Stream concepts open a shared Communication Execution Studio built around the AegisGrid incident-response workflow: P1 creates incident INC-104, P2 dispatches a response unit, and P3 publishes inventory/telemetry updates. This page is a deterministic simulation and does not claim that its generated events were delivered through live RabbitMQ or a production socket.
+
+### Message-oriented mode
+
+The trace models a discrete application envelope with a stable message ID, sender, receiver, queue acceptance, delivery attempt, acknowledgement, and business processing. The delivery-retry scenario demonstrates a transient delivery failure and retry with the same ID; consumers must be idempotent where at-least-once delivery is possible. Broker acceptance, consumer receipt, acknowledgement and business completion are distinct states.
+
+### Stream-oriented mode
+
+The trace models ordered bytes, sequence numbers, byte offsets, buffer occupancy, consumer lag, and application-frame decoding. Transport chunk boundaries are not treated as message boundaries. The interruption scenario shows a partial transfer, reconnect, and resume offset; the slow-consumer scenario records buffer/lag evidence. A production stream protocol would require real framing, offset, and reconnection semantics appropriate to its transport.
+
+### UI controls and evidence
+
+The dedicated page offers message-only, stream-only and comparison views; shared incident, telemetry, and mixed workloads; normal, slow-consumer, interruption, and delivery-retry presets; producer/consumer rate and buffer-capacity controls; step/run/pause/resume/reset; an event timeline and inspector; current transport counters; and JSON evidence export. Values are intended to be derived from the event trace, with pending events distinguished from executed events.
+
+### Validation and limitations
+
+The API validates workload, scenario, producer/consumer rates, and buffer capacity. Tests cover message retry and acknowledgement evidence, stream byte/buffer/reconnect evidence, and invalid configuration. The experiment remains explicitly marked as deterministic simulation; live broker/socket verification and real performance measurements are outside this demo.
