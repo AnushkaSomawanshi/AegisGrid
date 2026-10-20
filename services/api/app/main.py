@@ -23,7 +23,11 @@ POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5433")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "aegisgrid")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "aegisgrid")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "local-dev-only-change-me")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://aegisgrid:local-dev-rabbitmq-only@localhost:5672/")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
+RABBITMQ_PORT = os.getenv("RABBITMQ_PORT", "5672")
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "aegisgrid")
+RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "local-dev-rabbitmq-only")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 db_lock = asyncio.Lock()
@@ -128,7 +132,8 @@ async def lifespan(app: FastAPI):
                 raise
             await asyncio.sleep(1 + attempt)
     try:
-        broker_connection = await aio_pika.connect_robust(RABBITMQ_URL, timeout=4)
+        broker_url = RABBITMQ_URL or f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}/"
+        broker_connection = await aio_pika.connect_robust(broker_url, timeout=4)
         broker_channel = await broker_connection.channel()
     except Exception:
         broker_connection = None
