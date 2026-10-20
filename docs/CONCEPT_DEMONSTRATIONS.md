@@ -1,22 +1,68 @@
 # Concept Demonstrations
 
-This file is the lab workbook for the AegisGrid concept laboratory. The dashboards use synthetic examples to keep algorithm behavior deterministic, repeatable and easy to explain. These are not claims about live nodes.
+This workbook describes what each AegisGrid demonstration does and what its evidence means. Distributed-protocol labs are deterministic simulations unless the page explicitly identifies a runtime-backed operation.
 
-## 1. Physical clock synchronization — Berkeley-style model
+## 1. Physical clock synchronization — detailed Berkeley-style demonstration
 
-### Problem
-Different hosts can report different wall-clock times because their clocks are initialized separately and drift at different rates. Wall-clock timestamps from different machines may therefore be difficult to compare.
+### What the page demonstrates
 
-### Demonstration
-The coordinator receives synthetic offsets from nodes. For offsets o1,...,on, estimate the coordinator offset as the rounded arithmetic mean. For node i, compute a relative correction: adjustment_i = mean - offset_i.
+The Physical Clock Synchronization page is an interactive experiment workspace backed by the persisted `POST /api/experiments` and `POST /api/experiments/{id}/step` APIs. The frontend displays configuration, clock state, the backend-generated event ledger, calculation audit, execution progress and JSON evidence export. The clock model is synthetic; it does not read or modify the host operating system clock.
 
-The dashboard presents each initial offset, its signed adjustment and the resulting common model value.
+### Configure a round
 
-### Walkthrough
-1. Read the offsets and identify the nodes ahead of and behind the coordinator estimate.
-2. Compute the mean.
-3. Check the sign of each adjustment.
-4. Explain why this is not an NTP implementation: the simple example omits clock drift estimation, uncertainty, message delay asymmetry and robust outlier handling.
+- Configure 2–20 node offsets in milliseconds. `C0` is the coordinator and `N1...` are followers.
+- Configure per-node drift in milliseconds per simulated second.
+- Advance a synthetic elapsed duration to apply drift to the input offset.
+- Set a message-delay value for trace metadata.
+- Mark nodes unreachable to demonstrate timeout and participant exclusion.
+- Give the run a scenario label and create a persisted experiment.
+
+For a node (i), the simulated offset at the poll point is:
+
+`offset_i = initial_offset_i + drift_rate_i × simulated_elapsed_seconds`
+
+Message delay is deliberately labelled as timing metadata. This version does not infer offset from network round-trip timestamps or emulate packet delivery, asymmetry or jitter.
+
+### Execution phases
+
+The backend creates a chronological trace containing these event families:
+
+1. `clock.poll.sent` — coordinator sends a poll to a reachable follower.
+2. `clock.reading.received` — coordinator receives that follower's configured synthetic offset.
+3. `clock.poll.timeout` — an unreachable node is excluded from the sample set.
+4. `clock.coordinator.sampled` — the coordinator contributes its own reading when available.
+5. `clock.average.computed` — the backend records the participant list, excluded list, readings and computed mean.
+6. `clock.correction.sent` — the coordinator assigns a relative correction to a participating node.
+7. `clock.correction.applied` — the model records the node's corrected offset.
+8. `clock.round.completed` — final participant set and final spread are recorded.
+
+Use **Next event** to advance one persisted event, **Run to completion** to execute the remaining trace, **Reset trace** to reset the persisted cursor, and **Export JSON** to download the run configuration, result and executed trace.
+
+### Coordinator calculation and invariants
+
+Only nodes with a reported reading participate in the average:
+
+`mean_offset = sum(reported_offset_i) / participant_count`
+
+Each participating node receives:
+
+`correction_i = mean_offset - reported_offset_i`
+
+After ideal correction, every participating node's model offset equals the mean. The mean does not have to be zero because Berkeley-style averaging targets the group's estimated average, not necessarily UTC. Unreachable nodes remain unchanged and are not included in the final participating-node spread. A round with no reachable readings is rejected instead of reporting a false success.
+
+The result includes the per-node initial offset, drifted offset, reported offset, correction, corrected offset and status, plus participant/excluded-node lists, initial spread and final spread. The UI's calculation table is rendered from this backend result, not from a hard-coded worked example.
+
+### Worked baseline
+
+With offsets `[120, 40, -60, 200, 300]` ms and zero drift, the mean is `120 ms`. Corrections are `[0, +80, +180, -80, -180]` ms for `[C0, N1, N2, N3, N4]`. The initial spread is `360 ms`; the ideal simulated final spread is `0 ms`. This baseline is also covered by the backend tests.
+
+### Limitations displayed intentionally
+
+- These are synthetic offsets, not physical clock readings.
+- Drift is a configurable arithmetic offset applied at a chosen synthetic elapsed time, not a continuously ticking oscillator.
+- Delay is recorded in the trace but is not used to estimate network-adjusted clock offsets.
+- The simulation assumes ideal correction application; it does not model correction slew, oscillator uncertainty, asymmetric latency, outlier rejection or coordinator crash recovery.
+- The demonstration is for education and testing, not time-service or production clock discipline.
 
 ## 2. Lamport logical clocks
 

@@ -201,3 +201,61 @@ def test_outbox_dispatcher_module_is_importable_and_runs_a_poll_cycle():
     from app.outbox_dispatcher import dispatch_once
     result = dispatch_once()
     assert isinstance(result, int)
+
+
+def test_berkeley_clock_trace_exposes_poll_aggregate_and_corrections():
+    response = client.post("/api/experiments", json={
+        "lab_id": "physical-clock", "scenario": "detailed-five-node-round",
+        "parameters": {"offsets": [120, 40, -60, 200, 300],
+                       "drift_rates_ms_per_s": [0, 0, 0, 0, 0],
+                       "simulated_elapsed_s": 10, "message_delay_ms": 20}
+    })
+    assert response.status_code == 201
+    run = response.json()["run"]
+    result = run["result"]
+    assert result["mean_offset_ms"] == 120
+    assert result["participants"] == 5
+    assert result["initial_spread_ms"] == 360
+    assert result["final_spread_ms"] == 0
+    assert {event["event"] for event in run["trace"]} >= {
+        "clock.poll.sent", "clock.reading.received", "clock.average.computed",
+        "clock.correction.sent", "clock.correction.applied", "clock.round.completed"
+    }
+    by_node = {node["node"]: node for node in result["nodes"]}
+    assert by_node["N1"]["adjustment_ms"] == 80
+    assert by_node["N2"]["adjustment_ms"] == 180
+    assert all(node["corrected_offset_ms"] == 120 for node in result["nodes"])
+
+
+def test_berkeley_clock_excludes_unreachable_node_and_applies_drift():
+    response = client.post("/api/experiments", json={
+        "lab_id": "physical-clock", "scenario": "drift-and-timeout",
+        "parameters": {"offsets": [100, 0, 200], "drift_rates_ms_per_s": [1, 2, -1],
+                       "simulated_elapsed_s": 10, "message_delay_ms": 50,
+                       "unreachable_nodes": ["N2"]}
+    })
+    assert response.status_code == 201
+    run = response.json()["run"]
+    result = run["result"]
+    assert result["mean_offset_ms"] == 65
+    assert result["excluded_nodes"] == ["N2"]
+    assert result["participants"] == 2
+    assert result["nodes"][0]["offset_ms"] == 110
+    assert result["nodes"][1]["offset_ms"] == 20
+    assert result["nodes"][2]["status"] == "unreachable"
+    assert result["nodes"][2]["corrected_offset_ms"] == 190
+    timeout = next(event for event in run["trace"] if event["event"] == "clock.poll.timeout")
+    assert timeout["node"] == "N2"
+
+
+def test_berkeley_clock_rejects_invalid_drift_and_all_unreachable():
+    invalid_drift = client.post("/api/experiments", json={
+        "lab_id": "physical-clock", "scenario": "invalid-drift",
+        "parameters": {"offsets": [0, 10], "drift_rates_ms_per_s": [0]}
+    })
+    assert invalid_drift.status_code == 422
+    no_participants = client.post("/api/experiments", json={
+        "lab_id": "physical-clock", "scenario": "all-offline",
+        "parameters": {"offsets": [0, 10], "unreachable_nodes": ["C0", "N1"]}
+    })
+    assert no_participants.status_code == 422

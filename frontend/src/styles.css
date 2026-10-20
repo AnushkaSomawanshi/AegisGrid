@@ -59,3 +59,61 @@
 .table-sub{display:block;margin-top:4px;color:#73839b;font-size:10px;overflow-wrap:anywhere}.status-pill.pending{color:#e8b861}.status-pill.pending i{background:#e8b861}.status-pill.published{color:#62d6a2}.status-pill.published i{background:#62d6a2}.status-pill.paused{color:#e8b861}.status-pill.paused i{background:#e8b861}.status-pill.completed{color:#62d6a2}.status-pill.completed i{background:#62d6a2}
 
 .forensics-select{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}.forensics-select .advanced-field{flex:1;min-width:260px}.forensic-graph{display:flex;flex-direction:column;gap:8px;padding:12px 0}.forensic-node{display:flex;align-items:center;gap:12px;padding:12px;background:#0d1624;border:1px solid #253249;border-radius:9px}.forensic-node>span{font:11px 'DM Mono',monospace;color:#8ba6ff}.forensic-node>div{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}.forensic-node b{font-size:12px;overflow-wrap:anywhere}.forensic-node small{font-size:10px;color:#7f90a8}.forensic-node>svg{color:#526787;flex-shrink:0}.trace-row .feed-copy small{display:block;color:#7487a1;font-size:10px;margin-top:6px;overflow-wrap:anywhere;line-height:1.5}
+
+
+/* Dedicated Berkeley physical-clock experiment workspace */
+.clock-demo-page{max-width:1600px;margin:0 auto}
+.clock-metrics .metric-value small{font-size:12px;color:var(--muted);font-weight:600}
+.clock-status-value{font-size:18px!important;letter-spacing:.04em}
+.clock-layout{display:grid;grid-template-columns:minmax(360px,.9fr) minmax(0,1.1fr);gap:16px;align-items:start;margin:16px 0}
+.clock-config-panel,.clock-state-panel,.clock-math-panel{padding:18px;min-width:0}
+.clock-config-heading{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px;color:#dbe5f5}
+.clock-node-configs{display:grid;gap:9px}
+.clock-node-config{border:1px solid var(--line);background:rgba(255,255,255,.018);border-radius:10px;padding:11px}
+.clock-node-title{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.clock-node-title>div{display:grid;gap:3px;flex:1;min-width:0}
+.clock-node-title small,.clock-node-config small{color:var(--muted);font-size:11px}
+.clock-node-avatar{display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:rgba(120,149,255,.13);color:#9db0ff;font-family:'DM Mono',monospace;font-size:11px;font-weight:700}
+.clock-node-avatar.coordinator{background:rgba(57,186,208,.14);color:#65d7e7}
+.clock-offline-toggle{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;white-space:nowrap}
+.clock-range-row{display:grid;grid-template-columns:104px minmax(60px,1fr) 76px;gap:8px;align-items:center;margin-top:8px;color:var(--muted);font-size:11px}
+.clock-range-row input[type=range]{width:100%;accent-color:var(--blue)}
+.clock-range-row code{color:#dce5f5;text-align:right;font-family:'DM Mono',monospace;font-size:11px}
+.clock-extra-config{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.clock-controls{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+.clock-state-table{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.clock-state-head,.clock-state-row{display:grid;grid-template-columns:.65fr 1.25fr .7fr .75fr;gap:9px;align-items:center;padding:11px 10px}
+.clock-state-head{background:var(--panel2);color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.08em}
+.clock-state-row{border-top:1px solid var(--line2);font-size:11px}
+.clock-state-row>span:first-child{display:grid;gap:3px}
+.clock-state-row small{color:var(--muted);font-size:10px}
+.clock-mono,.clock-state-row code{font-family:'DM Mono',monospace;font-size:10px;white-space:nowrap}
+.offset-positive{color:#f7b267}.offset-negative{color:#79b7ff}
+.clock-state-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
+.clock-state-dot.online{background:var(--green);box-shadow:0 0 0 3px rgba(67,201,164,.12)}
+.clock-state-dot.offline{background:var(--red)}
+.clock-correction-detail{grid-column:1/-1;color:var(--muted);font-size:10px;border-top:1px dashed var(--line);padding-top:7px}
+.clock-chart-block{margin-top:18px}
+.clock-bar-row{display:grid;grid-template-columns:30px minmax(0,1fr) 64px;gap:9px;align-items:center;margin:9px 0;color:var(--muted);font-size:10px}
+.clock-bar-track{height:10px;position:relative;background:linear-gradient(90deg,transparent 49.6%,#64748b 49.6%,#64748b 50.4%,transparent 50.4%);border-radius:5px;overflow:hidden}
+.clock-bar-track i{position:absolute;top:1px;height:8px;max-width:50%;border-radius:3px}
+.clock-bar-track i.positive{background:var(--orange)}.clock-bar-track i.negative{background:var(--blue)}
+.clock-bar-row code{font-family:'DM Mono',monospace;text-align:right;color:#dfe8f7}
+.clock-chart-scale{display:flex;justify-content:space-between;color:var(--muted2);font-size:9px;margin-left:39px;margin-right:64px}
+.clock-result-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:18px}
+.clock-result-summary>div,.clock-formula-row>div{display:grid;gap:7px;padding:11px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;min-width:0}
+.clock-result-summary span,.clock-formula-row span{font-size:10px;color:var(--muted)}
+.clock-result-summary b,.clock-formula-row b{font-size:14px;overflow-wrap:anywhere}
+.clock-lower-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:16px;margin:16px 0}
+.clock-lower-grid>.panel{padding:17px;min-width:0}
+.clock-current-event{border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02);padding:14px;margin-bottom:12px}
+.clock-event-step{font-family:'DM Mono',monospace;color:var(--cyan);font-size:10px;letter-spacing:.08em}
+.clock-current-event h4{font-size:16px;text-transform:capitalize;margin:8px 0 12px}
+.clock-current-event pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;color:#b9c8dc;background:#0a1220;border-radius:8px;padding:12px;font-size:10px;line-height:1.6}
+.clock-math-panel{margin-top:16px}
+.clock-formula-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:12px 0 18px}
+.clock-math-panel .table-wrap{overflow-x:auto}
+.clock-math-panel table{min-width:780px}
+.clock-demo-page .trace-executed .feed-copy b{color:#9bb1ff}
+@media(max-width:1120px){.clock-layout{grid-template-columns:1fr}.clock-lower-grid{grid-template-columns:1fr}.clock-formula-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:680px){.clock-config-panel,.clock-state-panel{padding:12px}.clock-range-row{grid-template-columns:85px minmax(40px,1fr) 68px;gap:5px}.clock-state-head,.clock-state-row{grid-template-columns:.55fr 1fr .65fr .65fr;gap:5px;padding:9px 6px}.clock-mono{font-size:9px}.clock-extra-config,.clock-result-summary{grid-template-columns:1fr}.clock-formula-row{grid-template-columns:1fr 1fr}.clock-node-title{flex-wrap:wrap}}
