@@ -10,6 +10,7 @@ import {
 import {
   Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from "recharts";
+import { ExperimentWorkbench, ResourceCenter } from "./AdvancedPanels";
 
 const API = (import.meta as ImportMeta & {env?: {VITE_API_URL?: string}}).env?.VITE_API_URL || "/api-proxy";
 type Incident = {
