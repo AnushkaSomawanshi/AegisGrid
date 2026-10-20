@@ -42,7 +42,7 @@ kubectl get deployments,pods,services,pvc -n aegisgrid
 kubectl rollout status deployment/aegisgrid-api -n aegisgrid
 kubectl rollout status deployment/aegisgrid-frontend -n aegisgrid
 kubectl logs deployment/aegisgrid-api -n aegisgrid --tail=100
-kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100
+kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100\nkubectl logs deployment/aegisgrid-outbox-dispatcher -n aegisgrid --tail=100
 ```
 
 The frontend NodePort is 30080. The API Service is internal on port 8000. Accessing the dashboard should use the node address and NodePort supported by your local cluster.
