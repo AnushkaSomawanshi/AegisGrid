@@ -21,7 +21,7 @@ Algorithm labs currently live as modules inside the API process. They are not al
 The initial database insert and broker publication do not use a transactional outbox. Add an outbox and independently running consumer before claiming exactly-once effects or robust event publication guarantees.
 
 ## Protocol scope
-Clock synchronization, Lamport clocks and vector clocks are educational models. Global snapshot, election, mutual exclusion and beacon modules are foundations and must not be described as complete protocol implementations until their full state machines and tests exist.
+Clock synchronization, Lamport clocks and vector clocks are educational models. Global snapshot now models marker queues and channel recording; election traces Bully-style ELECTION/OK/COORDINATOR messages; mutual exclusion models Ricart–Agrawala-style request/reply/deferred-reply transitions; beacon timeout state advances through deterministic ticks. These remain educational simulations in one API process, not a multi-process distributed protocol deployment.
 
 ## Security boundary
 Never expose Docker socket access or Kubernetes credentials to the browser. Infrastructure actions need an authorised backend with least-privilege access and explicit operator confirmation.
