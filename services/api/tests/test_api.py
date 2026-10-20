@@ -337,3 +337,25 @@ def test_lamport_default_scenario_has_detailed_event_audit():
     assert [event["clock_after"] for event in run["trace"]] == [1, 2, 3, 4, 1]
     assert run["result"]["final_process_clocks"] == {"P1": 2, "P2": 4, "P3": 1}
     assert len(run["result"]["causal_edges"]) == 3
+
+
+def test_snapshot_default_derives_in_transit_message_from_recording_window():
+    response = client.post('/api/experiments', json={'lab_id':'snapshot','scenario':'in-transit'})
+    assert response.status_code == 201
+    run = response.json()['run']
+    trace = run['trace']
+    recorded = next(e for e in trace if e['event'] == 'channel.message_recorded')
+    assert recorded['channel'] == 'P2->P3'
+    assert recorded['message_id'] == 'M1'
+    started = next(e['step'] for e in trace if e['event'] == 'channel.recording.started' and e['channel'] == 'P2->P3')
+    closed = next(e['step'] for e in trace if e['event'] == 'channel.recording.closed' and e['channel'] == 'P2->P3')
+    assert started < recorded['step'] < closed
+    assert run['result']['consistent_cut'] is True
+
+
+def test_snapshot_empty_and_multiple_message_presets():
+    empty = client.post('/api/experiments', json={'lab_id':'snapshot','scenario':'empty'}).json()['run']
+    assert empty['result']['captured_messages'] == []
+    multiple = client.post('/api/experiments', json={'lab_id':'snapshot','scenario':'multiple'}).json()['run']
+    assert [m['message_id'] for m in multiple['result']['captured_messages']] == ['M1', 'M2']
+    assert all(c['status'] == 'closed' for c in multiple['result']['channel_states'])
