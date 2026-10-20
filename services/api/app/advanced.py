@@ -904,7 +904,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             if fault_mode == "recovery" and miss > misses // 2:
                 dropped = False
             if dropped:
-                if expected_at - last_received >= timeout_ms:
+                if expected_at - last_received >= timeout_ms and observed_state != "suspected":
                     observed_state = "suspected"
                     add("failure.suspected", expected_at, "Timeout elapsed without a received heartbeat. This is suspicion, not proof.",
                         miss_count=miss, timeout_ms=timeout_ms, decision_reason="elapsed time since last receive reached timeout")
@@ -937,7 +937,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         return trace, {"algorithm": "Heartbeat/beacon failure detector", "threshold": threshold,
                        "missed_beats": misses, "nodes": {node: final}, "final_state": observed_state,
                        "detection_time_ms": next((e["at_ms"] for e in trace if e["event"] == "failure.suspected"), None),
-                       "false_suspicion": actual_state == "running" and observed_state == "suspected",
+                       "false_suspicion": any(e["event"] == "failure.suspected" and e["actual_state"] == "running" for e in trace),
                        "execution_mode": "simulation",
                        "note": "Observer state is derived from received heartbeats. A timeout cannot distinguish crash from delay or partition."}
     if lab_id in {"messaging", "stream"}:
