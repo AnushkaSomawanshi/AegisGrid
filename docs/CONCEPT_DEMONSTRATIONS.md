@@ -316,3 +316,29 @@ The ledger records event ID, process, event type, previous clock, message timest
 ### Interpretation and limits
 
 Lamport timestamps can establish a consistent direction for causally related events but cannot prove that two unrelated events are concurrent in real time, and a scalar timestamp does not fully identify concurrency. This is a deterministic teaching simulation: it does not instrument the actual API, database, worker or broker, and it does not claim wall-clock timestamps or live distributed-process behavior.
+
+
+## Distributed mutual exclusion — Incident Operations Execution Studio
+
+The dedicated Mutual Exclusion Studio demonstrates three simulated AegisGrid services competing to modify one protected incident record, INC-1042.
+
+### Application context
+
+- P1 — Incident Service: changes incident status to ACKNOWLEDGED.
+- P2 — Dispatch Service: assigns UNIT-7 to the incident.
+- P3 — Inventory Service: reserves inventory for the incident.
+- Shared state: incident status, assigned unit and reservation availability. These values are simulation state, not a production database lock.
+
+### Execution dashboard
+
+The page includes protocol scenario presets, execution controls, four metrics, process cards, logical clocks, local request timestamps, received/required reply counts, deferred reply counts, protected incident state, REQUEST/REPLY message ledger, event timeline, selected-event inspector, consistency audit and JSON export. The UI renders the state at the executed event cursor; pending events do not apply their state changes.
+
+### Ricart–Agrawala simulation
+
+The backend generates local request events, REQUEST multicast sends and receives, peer priority decisions, immediate or deferred REPLY events, permission completion, critical-section entry, simulated application operation and exit. Requests use (Lamport timestamp, process ID) ordering. The final result includes grant order, process state, messages, protected-record state and consistency checks.
+
+Presets: three-way competition, simultaneous requests, deferred reply, sequential updates and delayed delivery. Runs are deterministic to support stepping, replay and automated tests.
+
+### Safety and scope
+
+The engine asserts one logical owner at a time, tracks entry/exit and records application operations inside the critical section. It is an educational deterministic simulation for healthy participants; it does not lock a real database, implement crash recovery, or claim production fencing/partition safety. A production deployment would need an appropriate transactional or distributed coordination mechanism at the resource boundary.
