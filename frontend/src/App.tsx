@@ -30,8 +30,8 @@ type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 
 const nav = [
   {label:"OPERATIONS",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & dispatch",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow}]},
-  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"messaging",name:"Message delivery",icon:MessageSquare},{id:"stream",name:"Telemetry streams",icon:Radio},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"election-demo",name:"Leader election studio",icon:Network},{id:"scale",name:"Scaling & resilience",icon:Layers3},{id:"labs",name:"Protocol execution studios",icon:Play}]},
-  {label:"INFRASTRUCTURE",items:[{id:"deployment",name:"Docker & Kubernetes",icon:Boxes},{id:"runtime",name:"Runtime diagnostics",icon:Terminal}]}
+  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"messaging",name:"Message-oriented delivery",icon:MessageSquare},{id:"stream",name:"Stream telemetry",icon:Radio},{id:"lab-physical-clock",name:"Clock synchronization",icon:Clock3},{id:"lab-lamport",name:"Lamport logical clocks",icon:GitBranch},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"election-demo",name:"Leader election",icon:Network},{id:"lab-mutex",name:"Mutual exclusion",icon:ShieldCheck},{id:"lab-failure",name:"Heartbeat suspicion",icon:Activity}]},
+  {label:"INFRASTRUCTURE",items:[{id:"deployment",name:"Docker & Kubernetes",icon:Boxes},{id:"scale",name:"Scaling & resilience",icon:Layers3},{id:"runtime",name:"Runtime diagnostics",icon:Terminal}]}
 ];
 
 const labList = [
@@ -136,7 +136,7 @@ function App(){
  const visibleEvents=events.filter(e=>(eventFilter==="all"||e.event_type.includes(eventFilter))&&`${e.event_type} ${e.source}`.toLowerCase().includes(search.toLowerCase()));
  const services=overview?.services||[];
  const activeLab=labList.find(l=>l.id===selectedLab)||labList[0];
- function navigate(id:string){if(id==="docs"||id==="experiments"){setPage("command");}else{setPage(id);}setSidebarOpen(false);setNotice("");}
+ function navigate(id:string){if(id.startsWith("lab-")){setSelectedLab(id.slice(4));setPage("labs");}else if(id==="docs"||id==="experiments"){setPage("command");}else{setPage(id);}setSidebarOpen(false);setNotice("");}
  const headerTitle=nav.flatMap(s=>s.items).find(i=>i.id===page)?.name||"Command centre";
 
  return <div className="app-shell">
@@ -144,7 +144,7 @@ function App(){
    <div className="brand"><div className="brand-mark"><Shield size={22}/><span></span></div><div><div className="brand-name">aegis<span>grid</span></div><div className="brand-caption">RESPONSE INTELLIGENCE</div></div><button className="icon-btn mobile-only" onClick={()=>setSidebarOpen(false)} aria-label="Close menu"><X size={18}/></button></div>
    <div className="workspace-switch"><div className="workspace-glyph"><Command size={16}/></div><div className="workspace-copy"><b>Central command</b><span>Emergency operations</span></div><ChevronDown size={15} className="muted-icon"/></div>
    <div className="sidebar-scroll">
-    {nav.map(section=><div className="nav-section" key={section.label}><div className="nav-label">{section.label}</div>{section.items.map(item=>{const Icon=item.icon;return <button key={item.id} onClick={()=>navigate(item.id)} className={cls("nav-item",page===item.id&&"active")}><Icon size={17}/><span>{item.name}</span>{item.id==="incidents"&&activeIncidents.length>0&&<span className="nav-counter">{activeIncidents.length}</span>}</button>;})}</div>)}
+    {nav.map(section=><div className="nav-section" key={section.label}><div className="nav-label">{section.label}</div>{section.items.map(item=>{const Icon=item.icon;return <button key={item.id} onClick={()=>navigate(item.id)} className={cls("nav-item",(page===item.id||(page==="labs"&&item.id==="lab-"+selectedLab))&&"active")}><Icon size={17}/><span>{item.name}</span>{item.id==="incidents"&&activeIncidents.length>0&&<span className="nav-counter">{activeIncidents.length}</span>}</button>;})}</div>)}
    </div>
    <div className="sidebar-bottom"><div className="environment-card"><div className="env-top"><span className={cls("status-dot",apiState==="connected"?"green":apiState==="demo"?"amber":"blue")}></span><span>{apiState==="connected"?"Live environment":apiState==="demo"?"Demo environment":"Connecting"}</span><span className="env-chip">DEV</span></div><p>{apiState==="connected"?"API and persistence responding":apiState==="demo"?"API unreachable · sample data active":"Checking service health"}</p><div className="env-line"><span>Gateway</span><b className={cls(apiState==="connected"?"text-green":"text-amber")}>{apiState==="connected"?"Online":"Unverified"}</b></div></div><button className="profile-row" onClick={()=>navigate("docs")}><div className="avatar">AG</div><div className="profile-copy"><b>Operations analyst</b><span>Project workspace</span></div><CircleHelp size={16} className="muted-icon"/></button></div>
   </aside>
