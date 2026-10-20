@@ -50,7 +50,7 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   const progress = stage === "ready" ? 0 : stages.findIndex(s => s.id === stage) + 1;
   const maxDisagreement = accepted.length ? Math.max(...accepted.map(n => n.offset)) - Math.min(...accepted.map(n => n.offset)) : 0;
   const avgAbsBefore = accepted.length ? Math.round(accepted.reduce((s, n) => s + Math.abs(n.offset - estimate), 0) / accepted.length) : 0;
-  const avgAbsAfter = accepted.length ? Math.round(accepted.reduce((s, n) => s + Math.abs((n.corrected ?? n.offset) - estimate), 0) / accepted.length) : 0;
+  const avgAbsAfter = accepted.length ? Math.round(accepted.reduce((s, n) => s + Math.abs(n.offset - estimate), 0) / accepted.length) : 0;
   const incidentRows = useMemo(() => [
     { service: "Incident intake", event: "incident.created", raw: 1000 + nodes[0].offset, corrected: 1000 + (stage === "apply" || stage === "verify" ? nodes[0].offset : nodes[0].offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - nodes[0].offset))), node: nodes[0].id },
     { service: "Dispatch service", event: "unit.assignment.created", raw: 1120 + nodes[1].offset, corrected: 1120 + (stage === "apply" || stage === "verify" ? nodes[1].offset : nodes[1].offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - nodes[1].offset))), node: nodes[1].id },
