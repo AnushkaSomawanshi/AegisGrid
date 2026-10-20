@@ -721,19 +721,124 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                        "note":"This trace serializes critical-section ownership; it is not a lock on an external production resource.",
                        "execution_mode":"simulation"}
     if lab_id == "beacon":
+        scenario = str(parameters.get("scenario", "heartbeat-loss"))
+        presets = {"normal-operation", "delayed-heartbeat", "heartbeat-loss", "failure-recovery", "intermittent-network"}
+        if scenario not in presets:
+            raise HTTPException(422, "unknown heartbeat scenario")
         try:
-            misses = int(parameters.get("missed_beats", 3))
-            threshold = int(parameters.get("threshold", 3))
+            interval = int(parameters.get("interval_ms", 1000))
+            timeout = int(parameters.get("timeout_ms", 3000))
+            misses = int(parameters.get("missed_beats", 3 if scenario != "normal-operation" else 0))
+            threshold = int(parameters.get("threshold", timeout))
+            delay = int(parameters.get("delay_ms", 2500 if scenario == "delayed-heartbeat" else 0))
         except (TypeError, ValueError):
-            raise HTTPException(422, "missed_beats and threshold must be integers")
-        if misses < 0 or misses > 100 or threshold < 1 or threshold > 100:
-            raise HTTPException(422, "missed_beats must be 0..100 and threshold must be 1..100")
-        trace = [{"step":i+1,"event":"heartbeat.missed","node":"node-2","miss_count":i+1,
-                  "state":"suspected" if i+1 < threshold else "unavailable"}
-                 for i in range(min(misses, 100))]
-        trace.append({"step":len(trace)+1,"event":"heartbeat.recovered","node":"node-2","state":"healthy"})
-        return trace, {"algorithm":"Heartbeat suspicion model","threshold":threshold,"missed_beats":misses,
-                       "final_state":"healthy","execution_mode":"simulation"}
+            raise HTTPException(422, "heartbeat timing and count parameters must be integers")
+        if interval < 100 or interval > 60000 or timeout < interval or timeout > 300000 or misses < 0 or misses > 100 or threshold < interval or threshold > 300000 or delay < 0 or delay > 300000:
+            raise HTTPException(422, "invalid heartbeat interval, timeout, miss count, threshold or delay")
+        if scenario == "normal-operation":
+            misses, delay = 0, 0
+        elif scenario == "delayed-heartbeat":
+            misses, delay = 1, max(delay, interval + 1)
+        elif scenario == "intermittent-network":
+            misses = max(misses, 4)
+        recover = bool(parameters.get("recover", scenario in {"delayed-heartbeat", "failure-recovery", "intermittent-network", "normal-operation"}))
+        node = str(parameters.get("node_id", "P2"))
+        if node not in {"P1", "P2", "P3"}:
+            raise HTTPException(422, "node_id must be P1, P2 or P3")
+        names = {"P1":"Incident Service", "P2":"Dispatch Service", "P3":"Inventory Service"}
+        states = {p:{"node":p,"service":names[p],"state":"healthy","last_heartbeat_at_ms":0,"missed_beats":0,
+                     "heartbeat_count":1,"suspicion_level":0.0,"alert":False} for p in ("P1","P2","P3")}
+        trace = []
+        def emit(at, event, p, detail, **extra):
+            snapshot = {k:dict(v) for k,v in states.items()}
+            trace.append({"step":len(trace)+1,"at_ms":at,"event":event,"node":p,"detail":detail,
+                          "state":states[p]["state"],"nodes":snapshot,"execution_mode":"simulation",**extra})
+        for p in ("P1","P2","P3"):
+            emit(0,"heartbeat.received",p,f"{p} ({names[p]}) is initially reachable; baseline heartbeat received",
+                 message_id=f"HB-{p}-000",latency_ms=0,elapsed_silence_ms=0)
+        horizon = max(interval * (misses + 1), timeout + interval, delay + interval)
+        # Other services remain live, making the suspect node distinguishable from a cluster-wide outage.
+        for tick in range(1, max(2, misses + 2)):
+            at = tick * interval
+            for p in ("P1","P2","P3"):
+                if p == node:
+                    if scenario == "normal-operation":
+                        states[p]["last_heartbeat_at_ms"] = at
+                        states[p]["heartbeat_count"] += 1
+                        states[p]["missed_beats"] = 0
+                        states[p]["suspicion_level"] = 0.0
+                        states[p]["state"] = "healthy"
+                        emit(at,"heartbeat.received",p,f"{p} heartbeat arrived on schedule",
+                             message_id=f"HB-{p}-{tick:03d}",latency_ms=interval,elapsed_silence_ms=0)
+                    elif scenario == "delayed-heartbeat" and tick == 1:
+                        emit(at,"heartbeat.sent",p,f"{p} sent heartbeat; simulated network delay is {delay} ms",
+                             message_id=f"HB-{p}-{tick:03d}",delivery_due_ms=at+delay,elapsed_silence_ms=at-states[p]["last_heartbeat_at_ms"])
+                    elif tick <= misses:
+                        elapsed = at - states[p]["last_heartbeat_at_ms"]
+                        states[p]["missed_beats"] += 1
+                        states[p]["suspicion_level"] = round(min(1.0, elapsed / threshold), 3)
+                        states[p]["state"] = "unavailable" if elapsed >= timeout else "suspected"
+                        states[p]["alert"] = states[p]["state"] != "healthy"
+                        emit(at,"heartbeat.missed",p,f"No heartbeat from {p} by expected deadline; elapsed silence {elapsed} ms",
+                             elapsed_silence_ms=elapsed,timeout_ms=timeout,suspicion_level=states[p]["suspicion_level"])
+                        if states[p]["state"] == "suspected":
+                            emit(at,"failure.suspected",p,f"{p} crossed the suspicion rule; this is not proof of a crash",
+                                 elapsed_silence_ms=elapsed,timeout_ms=timeout,suspicion_level=states[p]["suspicion_level"])
+                        if states[p]["state"] == "unavailable":
+                            emit(at,"failure.timeout",p,f"{p} exceeded the configured timeout and is marked unavailable by this detector",
+                                 elapsed_silence_ms=elapsed,timeout_ms=timeout,suspicion_level=states[p]["suspicion_level"])
+                    elif scenario == "intermittent-network" and tick % 2 == 0:
+                        states[p]["last_heartbeat_at_ms"] = at
+                        states[p]["heartbeat_count"] += 1
+                        states[p]["missed_beats"] = 0
+                        states[p]["suspicion_level"] = 0.0
+                        states[p]["state"] = "healthy"
+                        states[p]["alert"] = False
+                        emit(at,"heartbeat.received",p,f"{p} heartbeat recovered after intermittent delay",
+                             message_id=f"HB-{p}-{tick:03d}",latency_ms=interval*2,elapsed_silence_ms=0)
+                    else:
+                        elapsed = at - states[p]["last_heartbeat_at_ms"]
+                        states[p]["missed_beats"] += 1
+                        states[p]["suspicion_level"] = round(min(1.0, elapsed / threshold), 3)
+                        states[p]["state"] = "unavailable" if elapsed >= timeout else "suspected"
+                        states[p]["alert"] = True
+                        emit(at,"heartbeat.missed",p,f"Heartbeat deadline missed; elapsed silence {elapsed} ms",
+                             elapsed_silence_ms=elapsed,timeout_ms=timeout,suspicion_level=states[p]["suspicion_level"])
+                else:
+                    states[p]["last_heartbeat_at_ms"] = at
+                    states[p]["heartbeat_count"] += 1
+                    states[p]["missed_beats"] = 0
+                    states[p]["suspicion_level"] = 0.0
+                    states[p]["state"] = "healthy"
+                    emit(at,"heartbeat.received",p,f"{p} heartbeat received; service remains healthy",
+                         message_id=f"HB-{p}-{tick:03d}",latency_ms=interval,elapsed_silence_ms=0)
+        if scenario == "delayed-heartbeat" and recover:
+            at = interval + delay
+            states[node]["last_heartbeat_at_ms"] = at
+            states[node]["heartbeat_count"] += 1
+            states[node]["missed_beats"] = 0
+            states[node]["suspicion_level"] = 0.0
+            states[node]["state"] = "healthy"
+            states[node]["alert"] = False
+            emit(at,"heartbeat.received",node,f"Delayed heartbeat arrived after {delay} ms; suspicion cleared",
+                 message_id=f"HB-{node}-001",latency_ms=delay,elapsed_silence_ms=0,recovered=True)
+            emit(at,"failure.recovered",node,f"{node} returned to healthy after heartbeat receipt")
+        elif recover and scenario in {"failure-recovery","intermittent-network"}:
+            at = (misses+1)*interval
+            states[node]["last_heartbeat_at_ms"] = at
+            states[node]["heartbeat_count"] += 1
+            states[node]["missed_beats"] = 0
+            states[node]["suspicion_level"] = 0.0
+            states[node]["state"] = "healthy"
+            states[node]["alert"] = False
+            emit(at,"heartbeat.received",node,"A new heartbeat arrived; detector clears the previous suspicion",
+                 message_id=f"HB-{node}-REC",latency_ms=interval,elapsed_silence_ms=0,recovered=True)
+            emit(at,"failure.recovered",node,f"{node} returned to healthy after heartbeat receipt")
+        final_state = states[node]["state"]
+        return trace, {"algorithm":"Heartbeat suspicion model","scenario":scenario,"node_id":node,
+                       "interval_ms":interval,"timeout_ms":timeout,"threshold_ms":threshold,"missed_beats":misses,
+                       "final_state":final_state,"final_nodes":states,"alert_active":states[node]["alert"],
+                       "execution_mode":"simulation","note":"Missing heartbeats indicate suspicion/unavailability under the configured detector, not proof of a process crash."}
     if lab_id == "messaging":
         trace = [
             {"step":1,"event":"api.accepted","detail":"API validates event envelope"},
