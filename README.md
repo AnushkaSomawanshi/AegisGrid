@@ -82,15 +82,17 @@ Algorithm labs are initially implemented as isolated API modules so they can be 
 
 ## Kubernetes
 
-Manifests live under `infrastructure/kubernetes/`. The Kubernetes deployment is intended to run the application services, not merely an unrelated demo Pod. Before a local deployment, review the manifests and configure secrets safely.
+Manifests live under `infrastructure/kubernetes/`. Build the local images first (Docker Desktop's Kubernetes uses the local image cache in the usual desktop configuration):
 
 ```bash
+docker build -t aegisgrid-api:local ./services/api
+docker build -t aegisgrid-frontend:local ./frontend
 kubectl apply -f infrastructure/kubernetes/namespace.yaml
-kubectl apply -f infrastructure/kubernetes/
+kubectl apply -f infrastructure/kubernetes/app-stack.yaml
 kubectl get deployments,pods,services -n aegisgrid
 ```
 
-The initial manifests may require adaptation for your local image build and cluster. Do not commit real credentials. See `docs/KUBERNETES_GUIDE.md`.
+Before using this locally, replace the placeholder values in `infrastructure/kubernetes/app-stack.yaml` with matching development credentials in the Secret and broker configuration. The manifests are a starting point and have not yet been validated on your cluster. Do not commit production credentials. See `docs/KUBERNETES_GUIDE.md`.
 
 ## Documentation
 
