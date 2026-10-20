@@ -14,6 +14,7 @@ import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
 import { VectorClockDemo } from "./VectorClockDemo";
 import { LeaderElectionDemo } from "./LeaderElectionDemo";
+import { HeartbeatSuspicionDemo } from "./HeartbeatSuspicionDemo";
 
 const API = (import.meta as ImportMeta & {env?: {VITE_API_URL?: string}}).env?.VITE_API_URL || "/api-proxy";
 type Incident = {
@@ -155,9 +156,10 @@ function App(){
     {page==="vector-demo"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
     {page==="election-demo"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab==="election"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
-    {page==="labs"&&selectedLab==="vector"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}\n    {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
+    {page==="labs"&&selectedLab==="vector"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
+    {page==="labs"&&selectedLab==="beacon"&&<HeartbeatSuspicionDemo onBack={()=>navigate("experiments")}/>}\n    {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
     {page==="forensics"&&<ForensicsConsole/>}\n    {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
-    {page==="labs"&&selectedLab!=="vector"&&selectedLab!=="election"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
+    {page==="labs"&&selectedLab!=="vector"&&selectedLab!=="election"&&selectedLab!=="beacon"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
     {page==="scale"&&<ScalePage apiState={apiState} onNavigate={navigate}/>}
     {page==="runtime"&&<RuntimePage services={services} apiState={apiState} selectedService={selectedService} onSelect={setSelectedService} onRefresh={loadData}/>}
