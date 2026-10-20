@@ -155,7 +155,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         processes = parameters.get("processes", ["P1", "P2", "P3"])
         initiator = str(parameters.get("initiator", "P1"))
         messages = parameters.get("messages_in_transit", [{"from":"P2","to":"P3","message":"dispatch.updated #104"}])
-        if not isinstance(processes, list) or len(processes) < 2 or len(processes) > 10 or len(set(processes)) != len(processes):
+        if not isinstance(processes, list) or len(processes) < 2 or len(processes) > 10 or any(not isinstance(p, str) or not p for p in processes) or len(set(processes)) != len(processes):
             raise HTTPException(422, "processes must contain 2 to 10 unique process IDs")
         processes = [str(p) for p in processes]
         if initiator not in processes:
