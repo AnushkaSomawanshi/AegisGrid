@@ -256,3 +256,7 @@ Start Docker Compose as described below, open the dashboard, then:
 3. Follow the Docker/Kubernetes runbook to inspect actual service state and collect load/recovery measurements.
 
 **Limitations remain explicit:** lab traces are educational simulations or workflow templates rather than full distributed protocol engines; pause/resume and arbitrary failure injection are not yet implemented. The map uses sample coordinates and external OpenStreetMap tiles, not live GPS. Docker/Kubernetes operations pages provide safe CLI runbooks rather than direct runtime control. Do not report synthetic chart values as measured performance.
+
+### Detailed Berkeley clock synchronization lab
+
+The Physical Clock Synchronization entry in the Experiment Workbench opens a dedicated Berkeley-style demonstration with per-node offset/drift controls, offline-node timeout simulation, a backend-generated poll/aggregate/correction event trace, a coordinator calculation audit, before/after offset spread, stepwise execution, and JSON evidence export. Read [the detailed demonstration contract and limitations](docs/CONCEPT_DEMONSTRATIONS.md#1-physical-clock-synchronization--detailed-berkeley-style-demonstration). All clock values are synthetic; this is not an NTP client and does not alter host clocks.
