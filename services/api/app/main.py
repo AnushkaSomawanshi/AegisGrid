@@ -521,8 +521,6 @@ async def snapshot_send(body: EventAction):
     msg = {"id": mid, "from": src, "to": dst, "payload": body.message or "sample state transfer", "status": "IN_TRANSIT", "sent_at": utcnow()}
     lab["messages"][mid] = msg
     lab["processes"][src]["sent_messages"].append(mid)
-    if lab["processes"][dst]["recorded"] and channel["recording"]:
-        channel["snapshot_messages"].append(mid)
     lab["events"].append({"kind": "message.sent", "message_id": mid, "from": src, "to": dst, "at": utcnow()})
     state["global_snapshot"] = lab
     await publish_event("Lab.GlobalSnapshot.MessageSent", msg)
@@ -618,98 +616,242 @@ async def snapshot_run(body: EventAction):
         lab = await snapshot_step()
     return lab
 
-# ---------- Election lab (Bully algorithm model) ----------
+# ---------- Election lab: deterministic Bully algorithm trace ----------
 def init_election():
-    return {"nodes":[{"id":f"P{i}","priority":i,"available":True} for i in range(1,6)],"coordinator":"P5","events":[]}
+    return {"nodes":[{"id":f"P{i}","priority":i,"available":True,"state":"FOLLOWER"} for i in range(1,6)],"coordinator":"P5","events":[{"kind":"coordinator.initialized","process_id":"P5","at":utcnow()}],"round":0}
+
+def run_bully_election(lab, initiator):
+    candidates=[n for n in lab["nodes"] if n["available"]]
+    if not any(n["id"]==initiator for n in candidates):
+        raise HTTPException(409, "Election initiator is unavailable")
+    lab["round"] += 1
+    for n in lab["nodes"]:
+        if n["available"]:
+            n["state"]="FOLLOWER"
+    lab["events"].append({"kind":"election.started","round":lab["round"],"initiator":initiator,"at":utcnow()})
+    queue=[initiator]
+    processed=set()
+    while queue:
+        current=queue.pop(0)
+        if current in processed:
+            continue
+        processed.add(current)
+        node=next(n for n in lab["nodes"] if n["id"]==current)
+        if not node["available"]:
+            continue
+        higher=[n for n in candidates if n["priority"]>node["priority"]]
+        node["state"]="ELECTION"
+        for other in higher:
+            lab["events"].append({"kind":"ELECTION","from":current,"to":other["id"],"round":lab["round"],"at":utcnow()})
+            lab["events"].append({"kind":"OK","from":other["id"],"to":current,"round":lab["round"],"at":utcnow()})
+            if other["id"] not in processed:
+                queue.append(other["id"])
+    winner=max(candidates,key=lambda n:n["priority"])
+    lab["coordinator"]=winner["id"]
+    for n in lab["nodes"]:
+        if n["available"]:
+            n["state"]="COORDINATOR" if n["id"]==winner["id"] else "FOLLOWER"
+    for n in candidates:
+        if n["id"] != winner["id"]:
+            lab["events"].append({"kind":"COORDINATOR","from":winner["id"],"to":n["id"],"round":lab["round"],"at":utcnow()})
+    lab["events"].append({"kind":"election.completed","winner":winner["id"],"priority":winner["priority"],"round":lab["round"],"at":utcnow()})
+    return lab
+
 @app.get("/api/labs/election")
 def election_state():
-    if state["election"] is None: state["election"]=init_election()
+    if state["election"] is None:
+        state["election"] = init_election()
     return state["election"]
+
+@app.post("/api/labs/election/start")
+async def election_start(body: EventAction):
+    lab=state["election"] or init_election()
+    initiator=body.process_id if body.process_id in {n["id"] for n in lab["nodes"]} else next((n["id"] for n in lab["nodes"] if n["available"]),None)
+    if initiator is None:
+        raise HTTPException(409,"No available election participants")
+    lab=run_bully_election(lab,initiator)
+    state["election"]=lab
+    await publish_event("Lab.Election.Completed",{"coordinator":lab["coordinator"],"round":lab["round"]})
+    return lab
+
 @app.post("/api/labs/election/fail/{process_id}")
 async def election_fail(process_id: str):
     lab=state["election"] or init_election()
     node=next((n for n in lab["nodes"] if n["id"]==process_id),None)
     if not node: raise HTTPException(404,"Process not found")
+    if not node["available"]: return lab
+    was_coordinator=lab["coordinator"]==process_id
     node["available"]=False
+    node["state"]="UNAVAILABLE"
     lab["events"].append({"kind":"process.failed","process_id":process_id,"at":utcnow()})
-    if lab["coordinator"]==process_id:
-        candidates=[n for n in lab["nodes"] if n["available"] and n["priority"]>node["priority"]]
-        if not candidates:
-            candidates=[n for n in lab["nodes"] if n["available"]]
-        if candidates:
-            winner=max(candidates,key=lambda n:n["priority"])
-            lab["coordinator"]=winner["id"]
-            lab["events"].extend([
-              {"kind":"election.started","initiator":next((n["id"] for n in lab["nodes"] if n["available"]),None),"at":utcnow()},
-              {"kind":"coordinator.announced","process_id":winner["id"],"priority":winner["priority"],"at":utcnow()}
-            ])
+    if was_coordinator:
+        remaining=[n for n in lab["nodes"] if n["available"]]
+        if remaining:
+            initiator=max(remaining,key=lambda n:n["priority"])["id"]
+            lab=run_bully_election(lab,initiator)
+        else:
+            lab["coordinator"]=None
     state["election"]=lab
-    await publish_event("Lab.Election.StateChanged",lab)
+    await publish_event("Lab.Election.NodeFailed",{"process_id":process_id,"coordinator":lab["coordinator"]})
     return lab
 
-# ---------- Mutual exclusion (Ricart–Agrawala-style teaching model) ----------
+@app.post("/api/labs/election/restore/{process_id}")
+async def election_restore(process_id: str):
+    lab=state["election"] or init_election()
+    node=next((n for n in lab["nodes"] if n["id"]==process_id),None)
+    if not node: raise HTTPException(404,"Process not found")
+    node["available"]=True
+    node["state"]="FOLLOWER"
+    lab["events"].append({"kind":"process.restored","process_id":process_id,"at":utcnow()})
+    state["election"]=lab
+    await publish_event("Lab.Election.NodeRestored",{"process_id":process_id})
+    return lab
+
+@app.post("/api/labs/election/reset")
+def election_reset():
+    state["election"]=init_election()
+    return state["election"]
+
+# ---------- Mutual exclusion lab: deterministic Ricart-Agrawala model ----------
 def init_mutex():
-    return {"nodes":[{"id":f"P{i}","state":"RELEASED","request_ts":None,"permissions":[]} for i in range(1,6)],"owner":None,"events":[],"safety_ok":True}
+    return {"nodes":[{"id":f"P{i}","state":"RELEASED","request_ts":None,"replies_from":[],"deferred_to":[]} for i in range(1,6)],"logical_clock":0,"owner":None,"events":[],"safety_ok":True,"note":"Peer request/reply and deferred-reply rules are simulated deterministically in one API process."}
+
+def request_key(node):
+    return (node["request_ts"] or 10**12, node["id"])
+
+def grant_waiting_request(lab):
+    if lab["owner"] is not None:
+        return
+    ready=[n for n in lab["nodes"] if n["state"]=="REQUESTING" and len(n["replies_from"])==len(lab["nodes"])-1]
+    if ready:
+        winner=min(ready,key=request_key)
+        winner["state"]="IN_CRITICAL_SECTION"
+        lab["owner"]=winner["id"]
+        lab["events"].append({"kind":"critical-section.entered","process_id":winner["id"],"request_ts":winner["request_ts"],"at":utcnow()})
+    lab["safety_ok"]=sum(n["state"]=="IN_CRITICAL_SECTION" for n in lab["nodes"]) <= 1
+
 @app.get("/api/labs/mutual-exclusion")
 def mutex_state():
-    if state["mutual_exclusion"] is None: state["mutual_exclusion"]=init_mutex()
+    if state["mutual_exclusion"] is None:
+        state["mutual_exclusion"]=init_mutex()
     return state["mutual_exclusion"]
+
 @app.post("/api/labs/mutual-exclusion/request/{process_id}")
 async def mutex_request(process_id: str):
     lab=state["mutual_exclusion"] or init_mutex()
     node=next((n for n in lab["nodes"] if n["id"]==process_id),None)
     if not node: raise HTTPException(404,"Process not found")
-    if lab["owner"] and lab["owner"]!=process_id:
-        node["state"]="WAITING"
-        lab["events"].append({"kind":"request.deferred","process_id":process_id,"owner":lab["owner"],"at":utcnow()})
-    else:
-        lab["owner"]=process_id; node["state"]="IN_CRITICAL_SECTION"
-        node["permissions"]=[n["id"] for n in lab["nodes"] if n["id"]!=process_id]
-        lab["events"].append({"kind":"resource.granted","process_id":process_id,"at":utcnow()})
-    lab["safety_ok"]=sum(n["state"]=="IN_CRITICAL_SECTION" for n in lab["nodes"])<=1
+    if node["state"] in {"REQUESTING","IN_CRITICAL_SECTION"}:
+        raise HTTPException(409,"Process already has an outstanding resource request")
+    lab["logical_clock"]+=1
+    node["request_ts"]=lab["logical_clock"]
+    node["state"]="REQUESTING"
+    node["replies_from"]=[]
+    lab["events"].append({"kind":"REQUEST","from":process_id,"request_ts":node["request_ts"],"at":utcnow()})
+    for peer in lab["nodes"]:
+        if peer["id"]==process_id:
+            continue
+        lab["logical_clock"]+=1
+        defer = peer["state"]=="IN_CRITICAL_SECTION" or (peer["state"]=="REQUESTING" and request_key(peer)<request_key(node))
+        if defer:
+            if process_id not in peer["deferred_to"]:
+                peer["deferred_to"].append(process_id)
+            lab["events"].append({"kind":"REPLY_DEFERRED","from":peer["id"],"to":process_id,"reason":"peer owns critical section or has priority","at":utcnow()})
+        else:
+            node["replies_from"].append(peer["id"])
+            lab["events"].append({"kind":"REPLY","from":peer["id"],"to":process_id,"at":utcnow()})
+    grant_waiting_request(lab)
     state["mutual_exclusion"]=lab
-    await publish_event("Lab.MutualExclusion.Request",{"process_id":process_id,"owner":lab["owner"]})
+    await publish_event("Lab.MutualExclusion.Request",{"process_id":process_id,"owner":lab["owner"],"state":node["state"]})
     return lab
+
 @app.post("/api/labs/mutual-exclusion/release/{process_id}")
 async def mutex_release(process_id: str):
     lab=state["mutual_exclusion"] or init_mutex()
-    if lab["owner"]!=process_id: raise HTTPException(409,"Only the current owner can release the resource")
+    if lab["owner"]!=process_id:
+        raise HTTPException(409,"Only the current owner can release the resource")
     node=next(n for n in lab["nodes"] if n["id"]==process_id)
-    node["state"]="RELEASED"; lab["owner"]=None
-    waiting=next((n for n in lab["nodes"] if n["state"]=="WAITING"),None)
-    if waiting:
-        waiting["state"]="IN_CRITICAL_SECTION"; lab["owner"]=waiting["id"]
-        lab["events"].append({"kind":"resource.granted","process_id":waiting["id"],"at":utcnow()})
-    lab["events"].append({"kind":"resource.released","process_id":process_id,"at":utcnow()})
-    lab["safety_ok"]=sum(n["state"]=="IN_CRITICAL_SECTION" for n in lab["nodes"])<=1
+    node["state"]="RELEASED"
+    lab["events"].append({"kind":"RELEASE","from":process_id,"at":utcnow()})
+    lab["owner"]=None
+    deferred=list(node["deferred_to"])
+    node["deferred_to"]=[]
+    for requester_id in deferred:
+        requester=next(n for n in lab["nodes"] if n["id"]==requester_id)
+        if process_id not in requester["replies_from"]:
+            requester["replies_from"].append(process_id)
+        lab["events"].append({"kind":"DEFERRED_REPLY_SENT","from":process_id,"to":requester_id,"at":utcnow()})
+    grant_waiting_request(lab)
     state["mutual_exclusion"]=lab
     await publish_event("Lab.MutualExclusion.Release",{"process_id":process_id,"owner":lab["owner"]})
     return lab
 
-# ---------- Beacon / timeout failure detector ----------
+@app.post("/api/labs/mutual-exclusion/reset")
+def mutex_reset():
+    state["mutual_exclusion"]=init_mutex()
+    return state["mutual_exclusion"]
+
+# ---------- Beacon protocol / deterministic timeout detector ----------
+def init_beacons():
+    return {"tick":0,"interval_ticks":1,"suspect_after_ticks":3,"unavailable_after_ticks":6,"nodes":[{"id":f"P{i}","enabled":True,"last_beacon_tick":0,"missed":0,"status":"HEALTHY"} for i in range(1,6)],"events":[],"note":"Ticks are advanced explicitly for reproducible demonstrations; beacon payloads are educational."}
+
 @app.get("/api/labs/beacons")
 def beacons_state():
     if state["beacons"] is None:
-        state["beacons"]={"interval_ms":1000,"timeout_ms":3000,"nodes":[{"id":f"P{i}","enabled":True,"last_beacon_at":utcnow(),"missed":0,"status":"HEALTHY"} for i in range(1,6)],"events":[]}
+        state["beacons"]=init_beacons()
     return state["beacons"]
+
+@app.post("/api/labs/beacons/tick")
+async def beacons_tick():
+    lab=beacons_state()
+    lab["tick"]+=1
+    for node in lab["nodes"]:
+        if node["enabled"]:
+            node["last_beacon_tick"]=lab["tick"]
+            node["missed"]=0
+            if node["status"]!="HEALTHY":
+                node["status"]="HEALTHY"
+                lab["events"].append({"kind":"beacon.recovered","process_id":node["id"],"tick":lab["tick"],"at":utcnow()})
+            lab["events"].append({"kind":"BEACON","from":node["id"],"tick":lab["tick"],"at":utcnow()})
+        else:
+            node["missed"]=lab["tick"]-node["last_beacon_tick"]
+            new_status="UNAVAILABLE" if node["missed"]>=lab["unavailable_after_ticks"] else "SUSPECTED" if node["missed"]>=lab["suspect_after_ticks"] else "HEALTHY"
+            if new_status!=node["status"]:
+                node["status"]=new_status
+                lab["events"].append({"kind":"beacon.status_changed","process_id":node["id"],"status":new_status,"missed":node["missed"],"tick":lab["tick"],"at":utcnow()})
+    state["beacons"]=lab
+    await publish_event("Lab.Beacon.Tick",{"tick":lab["tick"],"nodes":lab["nodes"]})
+    return lab
+
 @app.post("/api/labs/beacons/{process_id}/pause")
 async def beacon_pause(process_id: str):
     lab=beacons_state()
     node=next((n for n in lab["nodes"] if n["id"]==process_id),None)
     if not node: raise HTTPException(404,"Process not found")
-    node["enabled"]=False; node["status"]="SUSPECTED"
-    lab["events"].append({"kind":"beacon.paused","process_id":process_id,"at":utcnow()})
-    await publish_event("Lab.Beacon.StateChanged",{"process_id":process_id,"status":node["status"]})
+    node["enabled"]=False
+    lab["events"].append({"kind":"beacon.paused","process_id":process_id,"tick":lab["tick"],"at":utcnow()})
+    state["beacons"]=lab
+    await publish_event("Lab.Beacon.Paused",{"process_id":process_id,"tick":lab["tick"]})
     return lab
+
 @app.post("/api/labs/beacons/{process_id}/resume")
 async def beacon_resume(process_id: str):
     lab=beacons_state()
     node=next((n for n in lab["nodes"] if n["id"]==process_id),None)
     if not node: raise HTTPException(404,"Process not found")
-    node["enabled"]=True; node["status"]="HEALTHY"; node["missed"]=0; node["last_beacon_at"]=utcnow()
-    lab["events"].append({"kind":"beacon.resumed","process_id":process_id,"at":utcnow()})
-    await publish_event("Lab.Beacon.StateChanged",{"process_id":process_id,"status":node["status"]})
+    node["enabled"]=True
+    node["last_beacon_tick"]=lab["tick"]
+    node["missed"]=0
+    node["status"]="HEALTHY"
+    lab["events"].append({"kind":"beacon.resumed","process_id":process_id,"tick":lab["tick"],"at":utcnow()})
+    state["beacons"]=lab
+    await publish_event("Lab.Beacon.Resumed",{"process_id":process_id,"tick":lab["tick"]})
     return lab
+
+@app.post("/api/labs/beacons/reset")
+def beacon_reset():
+    state["beacons"]=init_beacons()
+    return state["beacons"]
 
 @app.get("/api/labs")
 def labs_index():
