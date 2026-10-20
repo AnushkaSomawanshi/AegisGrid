@@ -8,7 +8,7 @@ import os
 import time
 from datetime import datetime, timezone
 from sqlalchemy import asc
-from .db import SessionLocal, init_db, OutboxRecord
+from .db import SessionLocal, OutboxRecord
 from .broker import publish_event
 
 POLL_SECONDS = max(1, int(os.getenv("OUTBOX_POLL_SECONDS", "3")))
@@ -46,7 +46,6 @@ def dispatch_once() -> int:
 
 
 def main() -> None:
-    init_db()
     print(f"[outbox-dispatcher] polling pending events every {POLL_SECONDS}s", flush=True)
     while True:
         try:

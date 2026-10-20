@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aegisgrid
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - postgres.yaml
+  - rabbitmq.yaml
+  - api.yaml
+  - worker.yaml
+  - outbox-dispatcher.yaml
+  - frontend.yaml
+secretGenerator:
+  - name: aegisgrid-runtime-secrets
+    literals:
+      - POSTGRES_PASSWORD=aegisgrid_dev_only
+      - RABBITMQ_USER=aegisgrid
+      - RABBITMQ_PASSWORD=aegisgrid_dev_only
+generatorOptions:
+  disableNameSuffixHash: true

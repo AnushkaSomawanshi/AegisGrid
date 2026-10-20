@@ -6,11 +6,10 @@ import time
 from datetime import datetime, timezone
 import pika
 from sqlalchemy.exc import IntegrityError
-from .db import SessionLocal, init_db, EventRecord, ProcessedMessage
+from .db import SessionLocal, EventRecord, ProcessedMessage
 
 
 def main() -> None:
-    init_db()
     host = os.getenv("RABBITMQ_HOST", "rabbitmq")
     credentials = pika.PlainCredentials(os.getenv("RABBITMQ_USER", "aegisgrid"), os.getenv("RABBITMQ_PASSWORD", "aegisgrid_dev"))
     params = pika.ConnectionParameters(host=host, port=int(os.getenv("RABBITMQ_PORT", "5672")), credentials=credentials,

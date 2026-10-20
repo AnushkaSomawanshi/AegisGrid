@@ -20,6 +20,8 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
       CORS_ORIGINS: http://localhost:3000
+      AEGISGRID_DEPLOYMENT_TARGET: docker-compose
+      AEGISGRID_ROLE: api
     ports: ["8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}
@@ -45,7 +47,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
     depends_on:
-      postgres: {condition: service_healthy}
+      api: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     restart: unless-stopped
   outbox-dispatcher:
@@ -64,7 +66,7 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
       OUTBOX_POLL_SECONDS: "3"
     depends_on:
-      postgres: {condition: service_healthy}
+      api: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     restart: unless-stopped
   postgres:

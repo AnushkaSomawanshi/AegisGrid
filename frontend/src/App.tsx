@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
-  Activity, AlertCircle, ArrowUpRight, Bell, BookOpen,
+  Activity, AlertCircle, ArrowUpRight, Bell, BookOpen, Boxes,
   CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Cloud, Code2,
   Command, Cpu, Database, GitBranch, Globe2, Layers3, Menu, MessageSquare,
   Network, Play, Plus, Radio, RefreshCw, Search, Server, Shield, ShieldCheck,
@@ -14,6 +14,7 @@ import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
 import { VectorClockDemo } from "./VectorClockDemo";
 import { LeaderElectionDemo } from "./LeaderElectionDemo";
+import { DeploymentStudio } from "./DeploymentStudio";
 import { CommunicationDemo } from "./CommunicationDemo";
 
 const API = (import.meta as ImportMeta & {env?: {VITE_API_URL?: string}}).env?.VITE_API_URL || "/api-proxy";
@@ -28,7 +29,7 @@ type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 const nav = [
   {label:"OVERVIEW",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & units",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow},{id:"messaging",name:"Outbox & worker",icon:MessageSquare},{id:"stream",name:"Telemetry stream",icon:Radio}]},
   {label:"DISTRIBUTED SYSTEMS",items:[{id:"labs",name:"Concept laboratory",icon:Workflow},{id:"experiments",name:"Experiment workbench",icon:Play},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"election-demo",name:"Leader election studio",icon:Network},{id:"architecture",name:"Service topology",icon:Network},{id:"scale",name:"Scale & resilience",icon:Layers3}]},
-  {label:"OPERATIONS",items:[{id:"runtime",name:"Runtime diagnostics",icon:Terminal},{id:"docs",name:"Project guide",icon:BookOpen}]}
+  {label:"OPERATIONS",items:[{id:"deployment",name:"Deployment Studio",icon:Boxes},{id:"runtime",name:"Runtime diagnostics",icon:Terminal},{id:"docs",name:"Project guide",icon:BookOpen}]}
 ];
 
 const labList = [
@@ -163,6 +164,7 @@ function App(){
     {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
     {page==="scale"&&<ScalePage apiState={apiState} onNavigate={navigate}/>}
+    {page==="deployment"&&<DeploymentStudio onBack={()=>navigate("command")}/>}
     {page==="runtime"&&<RuntimePage services={services} apiState={apiState} selectedService={selectedService} onSelect={setSelectedService} onRefresh={loadData}/>}
     {page==="docs"&&<DocsPage onNavigate={navigate}/>}
     <footer className="footer"><span>AEGISGRID <i>·</i> DISTRIBUTED RESPONSE PLATFORM</span><span>Academic systems lab <b>•</b> v1.0.0</span></footer>

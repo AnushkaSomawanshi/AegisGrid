@@ -564,3 +564,24 @@ def test_communication_studio_validates_scenario_rates_and_capacity():
     for parameters in invalid:
         response = client.post("/api/experiments",json={"lab_id":"messaging","parameters":parameters})
         assert response.status_code == 422
+
+
+def test_deployment_status_reports_live_dependency_probes_without_inventing_runtime_inventory():
+    response = client.get("/api/deployment/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["service"] == "AegisGrid API"
+    assert data["runtime_inventory"] == "not-connected"
+    assert len(data["checks"]) >= 2
+    assert {check["name"] for check in data["checks"]} >= {"PostgreSQL", "RabbitMQ"}
+    assert all(check["status"] in {"healthy", "reachable", "unavailable"} for check in data["checks"])
+
+
+def test_deployment_verify_request_exercises_api_database_path():
+    response = client.post("/api/deployment/verify-request")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["verified"] is True
+    assert data["path"] == ["Deployment Studio frontend", "AegisGrid API", "PostgreSQL"]
+    assert data["incident"]["id"] > 0
+    assert data["incident"]["title"].startswith("Deployment verification ")

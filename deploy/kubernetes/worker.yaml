@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisgrid-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aegisgrid-worker
+  template:
+    metadata:
+      labels:
+        app: aegisgrid-worker
+    spec:
+      initContainers:
+        - name: wait-for-dependencies
+          image: busybox:1.36
+          command: ["sh", "-c", "until wget -q -O /dev/null http://api:8000/health/ready && nc -z rabbitmq 5672; do echo waiting for API schema initialization and RabbitMQ; sleep 2; done"]
+      containers:
+        - name: worker
+          image: aegisgrid-api:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.worker"]
+          envFrom:
+            - configMapRef:
+                name: aegisgrid-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aegisgrid-runtime-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql+psycopg://aegisgrid:$(POSTGRES_PASSWORD)@postgres:5432/aegisgrid
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: aegisgrid-runtime-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aegisgrid-runtime-secrets
+                  key: RABBITMQ_PASSWORD
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
