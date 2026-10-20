@@ -20,6 +20,8 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-aegisgrid}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-aegisgrid_dev}
       CORS_ORIGINS: http://localhost:3000
+      AEGISGRID_DEPLOYMENT_TARGET: docker-compose
+      AEGISGRID_ROLE: api
     ports: ["8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}
