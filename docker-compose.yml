@@ -20,6 +20,9 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: aegisgrid-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: aegisgrid
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-dev-rabbitmq-only}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -36,7 +39,7 @@ services:
     container_name: aegisgrid-api
     environment:
       DATABASE_URL: postgresql://aegisgrid:${POSTGRES_PASSWORD:-local-dev-only-change-me}@postgres:5432/aegisgrid
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBITMQ_URL: amqp://aegisgrid:${RABBITMQ_PASSWORD:-local-dev-rabbitmq-only}@rabbitmq:5672/
       CORS_ORIGINS: http://localhost:3000
     ports:
       - "8000:8000"
