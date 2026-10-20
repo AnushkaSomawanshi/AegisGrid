@@ -223,6 +223,7 @@ The current implementation branch adds persisted resource inventory/reservations
 - [Scalability and Resilience Experiments](docs/EXPERIMENTS.md) — controlled experiments and measurement requirements.
 - [HTTP Load Probe](scripts/http_load_probe.py) — real HTTP latency/throughput samples with JSON report output.
 - [Kubernetes Recovery Probe](scripts/k8s_recovery_probe.py) — guarded Pod replacement readiness timing, requires explicit `--confirm` and is restricted to the `aegisgrid` namespace.
+- [Manifest Validator](scripts/validate_manifests.py) — structural check of required Compose services, Kubernetes workloads, PVC and optional HPA; not a substitute for deploying to a cluster.
 - [API OpenAPI](http://localhost:8000/docs) after starting the stack.
 
 ### Added API routes
