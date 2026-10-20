@@ -335,6 +335,13 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         process_states[initiator] = {"process": initiator, "state_label": "incident queue + dispatch cursor", "recorded_at_step": 1, "markers_received": 0}
         add("process.state_recorded", process=initiator, state_label=process_states[initiator]["state_label"],
             detail="Initiator records its local state before sending any marker.")
+        for source in processes:
+            if source != initiator:
+                ch = channels[f"{source}->{initiator}"]
+                ch["status"] = "recording"
+                ch["started_at_step"] = len(trace) + 1
+                add("channel.recording.started", process=initiator, channel=ch["channel"], sender=source,
+                    receiver=initiator, detail="Initiator records each incoming channel after saving its local state.")
         for target in processes:
             if target == initiator:
                 continue
@@ -625,8 +632,9 @@ def list_reservations(db: Session = Depends(get_db)):
 
 @router.post("/experiments", status_code=201)
 def create_experiment(body: ExperimentCreate, db: Session = Depends(get_db)):
-    trace, result = _trace_for(body.lab_id, body.parameters)
-    row = ExperimentRun(lab_id=body.lab_id, scenario=body.scenario, parameters=json.dumps(body.parameters),
+    parameters = {**body.parameters, "scenario": body.scenario} if body.lab_id == "snapshot" else body.parameters
+    trace, result = _trace_for(body.lab_id, parameters)
+    row = ExperimentRun(lab_id=body.lab_id, scenario=body.scenario, parameters=json.dumps(parameters),
                         trace=json.dumps(trace), result=json.dumps(result), status="ready", current_step=0)
     db.add(row)
     db.commit()
