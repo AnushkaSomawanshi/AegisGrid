@@ -125,6 +125,8 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         if not isinstance(excluded, list) or any(node not in node_ids for node in excluded):
             raise HTTPException(422, "unreachable_nodes must be a list of configured node IDs (C0, N1, ...)")
         excluded_set = set(excluded)
+        if "C0" in excluded_set:
+            raise HTTPException(422, "coordinator C0 must be online to initiate a Berkeley synchronization round")
         nodes = []
         for i, offset in enumerate(offsets):
             node_id = node_ids[i]
