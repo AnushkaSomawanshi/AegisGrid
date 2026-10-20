@@ -157,8 +157,6 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             add("clock.coordinator.sampled", node="C0", reported_offset_ms=nodes[0]["offset_ms"])
         else:
             add("clock.coordinator.unavailable", node="C0", decision="coordinator-reading-excluded")
-        mean = round(sum(float(n["reported_offset_ms"]) for n in participants if n["reported_offset_ms"] is not None)
-                     / sum(1 for n in participants if n["reported_offset_ms"] is not None), 2)
         reported = [n for n in participants if n["reported_offset_ms"] is not None]
         if not reported:
             raise HTTPException(422, "no clock readings were received; synchronization round cannot complete")
