@@ -214,3 +214,39 @@ The current academic baseline keeps service boundaries understandable and avoids
 ## Academic and safety note
 
 AegisGrid is a software engineering demonstration. Do not use it for real emergency coordination. Protocol traces and prepopulated chart data are synthetic; runtime health or scaling conclusions should be supported by actual command output and recorded measurements.
+
+## Detailed implementation and demonstration
+
+The current implementation branch adds persisted resource inventory/reservations and a stepwise experiment workbench. See:
+- [Project Analysis Gap Audit](docs/PROJECT_ANALYSIS_GAP_AUDIT.md) — requirement-by-requirement gap analysis and acceptance gate.
+- [Docker & Kubernetes Demonstration Runbook](docs/DOCKER_KUBERNETES_DEMONSTRATION.md) — full run sequence for Compose, incident/resource workflow, RabbitMQ worker, Kubernetes rollout/scaling, Pod recovery, and evidence capture.
+- [Scalability and Resilience Experiments](docs/EXPERIMENTS.md) — controlled experiments and measurement requirements.
+- [HTTP Load Probe](scripts/http_load_probe.py) — real HTTP latency/throughput samples with JSON report output.
+- [API OpenAPI](http://localhost:8000/docs) after starting the stack.
+
+### Added API routes
+
+| Route | Purpose |
+|---|---|
+| `GET /api/resources` | List persisted field units/facilities/resources |
+| `POST /api/resources` | Register a resource with optional coordinates |
+| `POST /api/resources/demo-seed` | Idempotently seed sample resource inventory |
+| `GET /api/reservations` | List reservation history |
+| `POST /api/reservations` | Reserve an available resource; returns 409 on conflict |
+| `POST /api/reservations/{id}/release` | Release a reservation and restore availability |
+| `POST /api/experiments` | Create a persisted, parameterized concept trace |
+| `GET /api/experiments` | List recent saved runs |
+| `GET /api/experiments/{id}` | Retrieve a saved run |
+| `POST /api/experiments/{id}/step` | Advance one event in the saved trace |
+| `POST /api/experiments/{id}/reset` | Reset the saved trace cursor |
+| `POST /api/beacons/simulate` | Generate a configurable heartbeat timeout/recovery trace |
+| `GET /api/forensics/{incident_id}` | Reconstruct chronologically matching persisted incident events |
+
+### Run the new panels
+
+Start Docker Compose as described below, open the dashboard, then:
+1. Open **Resources & units** and select **Load sample resources**. Inspect the map markers and database-backed inventory; register a resource and reserve/release it.
+2. Open **Experiment workbench**. Select a concept, configure supported parameters, create a run, step through events, reset and reopen a saved run. Copy the JSON evidence for your report.
+3. Follow the Docker/Kubernetes runbook to inspect actual service state and collect load/recovery measurements.
+
+**Limitations remain explicit:** lab traces are educational simulations or workflow templates rather than full distributed protocol engines; pause/resume and arbitrary failure injection are not yet implemented. The map uses sample coordinates and external OpenStreetMap tiles, not live GPS. Docker/Kubernetes operations pages provide safe CLI runbooks rather than direct runtime control. Do not report synthetic chart values as measured performance.
