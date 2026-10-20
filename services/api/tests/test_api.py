@@ -468,12 +468,65 @@ def test_bully_election_step_reset_replay():
     assert again.json()["event"] == first.json()["event"]
 
 
+def test_mutual_exclusion_studio_has_protocol_events_and_safe_final_state():
+    response = client.post("/api/experiments", json={"lab_id":"mutex","scenario":"three-way-competition","parameters":{"scenario":"three-way-competition"}})
+    assert response.status_code == 201
+    run = response.json()["run"]
+    result = run["result"]
+    events = [event["event"] for event in run["trace"]]
+    assert result["algorithm"] == "Ricart–Agrawala distributed mutual exclusion"
+    assert "request.sent" in events
+    assert "request.received" in events
+    assert "reply.sent" in events
+    assert "reply.deferred" in events
+    assert "critical-section.enter" in events
+    assert "application.operation" in events
+    assert "critical-section.exit" in events
+    assert all(result["consistency_checks"].values())
+    assert result["max_simultaneous_owners"] == 1
+    assert result["final_application_state"]["incident_id"] == "INC-1042"
+
+
+def test_mutual_exclusion_scenarios_are_reproducible_and_converge():
+    for scenario in ("sequential-updates","simultaneous-requests","deferred-reply","three-way-competition","delayed-delivery"):
+        response = client.post("/api/experiments", json={"lab_id":"mutex","scenario":scenario,"parameters":{"scenario":scenario}})
+        assert response.status_code == 201
+        run = response.json()["run"]
+        assert len(run["trace"]) > 10
+        assert all(run["result"]["consistency_checks"].values())
+        assert len(run["result"]["grant_order"]) == 3
+        assert len(set(run["result"]["grant_order"])) == 3
+
+
+def test_mutual_exclusion_rejects_invalid_process_requests():
+    for requests in (
+        [{"process_id":1,"timestamp":1},{"process_id":1,"timestamp":2},{"process_id":3,"timestamp":3}],
+        [{"process_id":1,"timestamp":0},{"process_id":2,"timestamp":1},{"process_id":3,"timestamp":2}],
+        [{"process_id":1,"timestamp":1},{"process_id":2,"timestamp":1}],
+    ):
+        response = client.post("/api/experiments",json={"lab_id":"mutex","parameters":{"requests":requests}})
+        assert response.status_code == 422
+
+
+def test_mutual_exclusion_step_reset_replays_trace():
+    response = client.post("/api/experiments",json={"lab_id":"mutex","scenario":"simultaneous-requests","parameters":{"scenario":"simultaneous-requests"}})
+    assert response.status_code == 201
+    run_id = response.json()["run"]["id"]
+    first = client.post(f"/api/experiments/{run_id}/step")
+    assert first.status_code == 200
+    reset = client.post(f"/api/experiments/{run_id}/reset")
+    assert reset.status_code == 200
+    replay = client.post(f"/api/experiments/{run_id}/step")
+    assert replay.status_code == 200
+    assert replay.json()["event"] == first.json()["event"]
+
+
 def test_heartbeat_suspicion_studio_emits_detector_evidence():
     response = client.post("/api/experiments", json={
         "lab_id":"beacon","scenario":"heartbeat-loss",
         "parameters":{"scenario":"heartbeat-loss","node_id":"P2","interval_ms":1000,"timeout_ms":3000,"threshold":3000,"missed_beats":4,"recover":False}
     })
-    assert response.status_code == 200
+    assert response.status_code == 201
     run = response.json()["run"]
     assert run["result"]["algorithm"] == "Heartbeat suspicion model"
     assert run["result"]["final_state"] == "unavailable"
@@ -492,7 +545,7 @@ def test_heartbeat_suspicion_scenarios_and_recovery_are_deterministic():
                           "missed_beats":0 if scenario == "normal-operation" else 4,
                           "recover":scenario != "heartbeat-loss"}
         })
-        assert response.status_code == 200
+        assert response.status_code == 201
         run = response.json()["run"]
         assert run["trace"]
         assert run["result"]["execution_mode"] == "simulation"
