@@ -705,8 +705,8 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             scenario = "three-way-competition"
         supplied = parameters.get("requests")
         raw_requests = supplied if supplied is not None else presets[scenario]
-        if not isinstance(raw_requests, list) or not 2 <= len(raw_requests) <= 3:
-            raise HTTPException(422, "two or three process requests are required")
+        if not isinstance(raw_requests, list) or len(raw_requests) != 3:
+            raise HTTPException(422, "exactly three unique process requests are required")
         requests = []
         seen = set()
         for item in raw_requests:
