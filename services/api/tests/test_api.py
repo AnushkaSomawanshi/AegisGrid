@@ -259,3 +259,81 @@ def test_berkeley_clock_rejects_invalid_drift_and_all_unreachable():
         "parameters": {"offsets": [0, 10], "unreachable_nodes": ["C0", "N1"]}
     })
     assert no_participants.status_code == 422
+
+
+def test_lamport_demo_derives_message_timestamp_and_causal_edges():
+    response = client.post("/api/experiments", json={
+        "lab_id": "lamport", "scenario": "detailed-incident-dispatch",
+        "parameters": {"operations": [
+            {"process":"P1","kind":"local","label":"create incident","event_id":"E1"},
+            {"process":"P1","kind":"send","label":"send dispatch request","message_id":"M1","to":"P2","event_id":"E2"},
+            {"process":"P2","kind":"receive","label":"receive dispatch request","message_id":"M1","from":"P1","event_id":"E3"},
+            {"process":"P2","kind":"local","label":"assign unit","event_id":"E4"},
+            {"process":"P3","kind":"local","label":"independent refresh","event_id":"E5"}
+        ]}
+    })
+    assert response.status_code == 201
+    run = response.json()["run"]
+    trace = run["trace"]
+    assert [(e["event_id"], e["clock_before"], e["clock_after"]) for e in trace] == [
+        ("E1", 0, 1), ("E2", 1, 2), ("E3", 0, 3), ("E4", 3, 4), ("E5", 0, 1)
+    ]
+    assert trace[1]["message_clock"] == 2
+    assert trace[2]["message_clock"] == 2
+    assert trace[2]["calculation"] == "max(0, 2) + 1 = 3"
+    assert trace[2]["causal_predecessors"] == ["E2"]
+    assert trace[3]["causal_predecessors"] == ["E3"]
+    assert trace[4]["causal_predecessors"] == []
+    assert {"from":"E2","to":"E3","relation":"message"} in run["result"]["causal_edges"]
+
+
+def test_lamport_receive_uses_max_rule_when_local_clock_is_ahead():
+    response = client.post("/api/experiments", json={
+        "lab_id": "lamport", "scenario": "local-clock-ahead",
+        "parameters": {"operations": [
+            {"process":"P2","kind":"local","label":"local 1"},
+            {"process":"P2","kind":"local","label":"local 2"},
+            {"process":"P2","kind":"local","label":"local 3"},
+            {"process":"P1","kind":"send","message_id":"M1","to":"P2"},
+            {"process":"P2","kind":"receive","message_id":"M1"}
+        ]}
+    })
+    assert response.status_code == 201
+    trace = response.json()["run"]["trace"]
+    assert trace[-1]["clock_before"] == 3
+    assert trace[-1]["message_clock"] == 1
+    assert trace[-1]["clock_after"] == 4
+    assert trace[-1]["calculation"] == "max(3, 1) + 1 = 4"
+
+
+def test_lamport_rejects_unknown_duplicate_and_mismatched_messages():
+    unknown = client.post("/api/experiments", json={
+        "lab_id":"lamport","scenario":"bad-receive",
+        "parameters":{"operations":[{"process":"P2","kind":"receive","message_id":"missing"}]}
+    })
+    assert unknown.status_code == 422
+    duplicate = client.post("/api/experiments", json={
+        "lab_id":"lamport","scenario":"duplicate-message",
+        "parameters":{"operations":[
+            {"process":"P1","kind":"send","message_id":"M1"},
+            {"process":"P1","kind":"send","message_id":"M1"}
+        ]}
+    })
+    assert duplicate.status_code == 422
+    mismatch = client.post("/api/experiments", json={
+        "lab_id":"lamport","scenario":"wrong-recipient",
+        "parameters":{"operations":[
+            {"process":"P1","kind":"send","message_id":"M1","to":"P3"},
+            {"process":"P2","kind":"receive","message_id":"M1"}
+        ]}
+    })
+    assert mismatch.status_code == 422
+
+
+def test_lamport_default_scenario_has_detailed_event_audit():
+    run = client.post("/api/experiments", json={
+        "lab_id":"lamport","scenario":"default-detailed"
+    }).json()["run"]
+    assert [event["clock_after"] for event in run["trace"]] == [1, 2, 3, 4, 1]
+    assert run["result"]["final_process_clocks"] == {"P1": 2, "P2": 4, "P3": 1}
+    assert len(run["result"]["causal_edges"]) == 3
