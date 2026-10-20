@@ -359,3 +359,45 @@ def test_snapshot_empty_and_multiple_message_presets():
     multiple = client.post('/api/experiments', json={'lab_id':'snapshot','scenario':'multiple'}).json()['run']
     assert [m['message_id'] for m in multiple['result']['captured_messages']] == ['M1', 'M2']
     assert all(c['status'] == 'closed' for c in multiple['result']['channel_states'])
+
+
+def test_vector_clock_default_trace_calculates_all_vectors():
+    response = client.post('/api/experiments', json={'lab_id':'vector','scenario':'basic-causality'})
+    assert response.status_code == 201
+    run = response.json()['run']
+    assert [event['vector_after'] for event in run['trace']] == [
+        [1,0,0], [2,0,0], [2,1,0], [2,2,0],
+        [0,0,1], [2,3,0], [2,3,2], [3,0,0]
+    ]
+    receive = run['trace'][2]
+    assert receive['message_vector'] == [2,0,0]
+    assert receive['merge_vector'] == [2,0,0]
+    assert receive['calculation'].endswith('[2, 1, 0]')
+    assert run['result']['final_process_vectors'] == {'P1':[3,0,0],'P2':[2,3,0],'P3':[2,3,2]}
+
+
+def test_vector_clock_identifies_concurrent_events():
+    run = client.post('/api/experiments', json={'lab_id':'vector','scenario':'basic-causality'}).json()['run']
+    pair = next(c for c in run['result']['event_comparisons'] if c['a']=='E4' and c['b']=='E5')
+    assert pair['relation'] == 'concurrent'
+    assert any({c['a'],c['b']} == {'E4','E5'} for c in run['result']['concurrent_pairs'])
+
+
+def test_vector_clock_multi_hop_propagates_causal_history():
+    run = client.post('/api/experiments', json={'lab_id':'vector','scenario':'multi-hop'}).json()['run']
+    assert run['trace'][2]['vector_after'] == [2,1,0]
+    assert run['trace'][4]['vector_after'] == [2,2,1]
+    assert {'from':'E2','to':'E3','relation':'message'} in run['result']['causal_edges']
+    assert {'from':'E4','to':'E5','relation':'message'} in run['result']['causal_edges']
+
+
+def test_vector_clock_rejects_unknown_and_wrong_recipient_messages():
+    unknown = client.post('/api/experiments', json={'lab_id':'vector','parameters':{'operations':[
+        {'process':'P2','kind':'receive','message_id':'missing','event_id':'E1'}
+    ]}})
+    assert unknown.status_code == 422
+    wrong = client.post('/api/experiments', json={'lab_id':'vector','parameters':{'operations':[
+        {'process':'P1','kind':'send','message_id':'M1','to':'P2','event_id':'E1'},
+        {'process':'P3','kind':'receive','message_id':'M1','event_id':'E2'}
+    ]}})
+    assert wrong.status_code == 422
