@@ -245,6 +245,49 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: aegisgrid-outbox-dispatcher
+  namespace: aegisgrid
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: aegisgrid-outbox-dispatcher}
+  template:
+    metadata:
+      labels: {app: aegisgrid-outbox-dispatcher}
+    spec:
+      containers:
+        - name: outbox-dispatcher
+          image: aegisgrid-api:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.outbox_dispatcher"]
+          env:
+            - name: POSTGRES_HOST
+              value: aegisgrid-postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: POSTGRES_DB}}
+            - name: POSTGRES_USER
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: POSTGRES_PASSWORD}}
+            - name: RABBITMQ_HOST
+              value: aegisgrid-rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              valueFrom: {configMapKeyRef: {name: aegisgrid-config, key: RABBITMQ_USER}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: aegisgrid-secrets, key: RABBITMQ_PASSWORD}}
+            - name: OUTBOX_POLL_SECONDS
+              value: "3"
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 192Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: aegisgrid-worker
   namespace: aegisgrid
 spec:
