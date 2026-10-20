@@ -195,3 +195,9 @@ def test_snapshot_model_records_markers_and_in_transit_messages():
     assert run["result"]["process_states_recorded"] == 3
     assert run["result"]["messages_in_transit_recorded"] == 1
     assert any(event["event"] == "marker.received" for event in run["trace"])
+
+
+def test_outbox_dispatcher_module_is_importable_and_runs_a_poll_cycle():
+    from app.outbox_dispatcher import dispatch_once
+    result = dispatch_once()
+    assert isinstance(result, int)
