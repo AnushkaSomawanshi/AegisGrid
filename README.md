@@ -34,6 +34,7 @@ Requirements: Docker Desktop with Compose v2.
 docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 api
+docker compose logs --tail=100 worker
 ```
 
 Open the frontend at http://localhost:3000 and API docs at http://localhost:8000/docs.
@@ -59,6 +60,7 @@ npm run build
 |---|---|
 | frontend | Command Centre and concept-lab UI |
 | api | FastAPI gateway, incidents, experiment APIs and event ledger |
+| worker | Independent RabbitMQ consumer; persists processed deliveries and heartbeats |
 | postgres | Persistent application records |
 | rabbitmq | Asynchronous event broker |
 
