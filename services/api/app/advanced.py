@@ -704,21 +704,18 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         }
         if scenario not in presets:
             scenario = "simultaneous-requests"
-        count = 2 if scenario == "tie-break" else 3
+        count = len(presets[scenario])
         raw = parameters.get("requests")
         if raw is None:
-            stamps = presets[scenario]
-            raw = [{"process_id": i + 1, "timestamp": stamps[i]} for i in range(count)]
+            raw = [{"process_id": i + 1, "timestamp": presets[scenario][i]} for i in range(count)]
         if not isinstance(raw, list) or len(raw) != count:
             raise HTTPException(422, f"scenario requires exactly {count} process requests")
-        requests = []
-        seen = set()
+        requests, seen = [], set()
         for item in raw:
             if not isinstance(item, dict):
                 raise HTTPException(422, "each request must be an object")
             try:
-                pid = int(item.get("process_id", 0))
-                stamp = int(item.get("timestamp", 1))
+                pid, stamp = int(item.get("process_id", 0)), int(item.get("timestamp", 1))
             except (TypeError, ValueError):
                 raise HTTPException(422, "process_id and timestamp must be integers")
             if pid < 1 or pid > count or pid in seen or stamp < 1 or stamp > 100000:
@@ -729,14 +726,12 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             raise HTTPException(422, "process IDs must be contiguous from P1")
         ordered = sorted(requests, key=lambda r: (r["timestamp"], r["pid"]))
         priority = {r["pid"]: (r["timestamp"], r["pid"]) for r in requests}
-        states = {i: {"process": f"P{i}", "clock": 0, "state": "RELEASED",
-                      "request_timestamp": None, "replies_received": [],
-                      "replies_required": [f"P{j}" for j in range(1, count + 1) if j != i],
-                      "deferred_replies": [], "alive": True}
-                  for i in range(1, count + 1)}
+        states = {i: {"process": f"P{i}", "clock": 0, "state": "RELEASED", "request_timestamp": None,
+                      "replies_received": [], "replies_required": [f"P{j}" for j in range(1, count + 1) if j != i],
+                      "deferred_replies": [], "alive": True} for i in range(1, count + 1)}
         trace: list[dict[str, Any]] = []
         messages: list[dict[str, Any]] = []
-        owner = None
+        owner: str | None = None
         record = {"incident_id": "INC-1042", "status": "OPEN", "assigned_unit": None, "reservation": "AVAILABLE"}
         entry_order: list[str] = []
         max_owners = 0
@@ -744,60 +739,55 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         def snapshot() -> dict[str, Any]:
             return {f"P{k}": {**v, "replies_received": list(v["replies_received"]),
                               "replies_required": list(v["replies_required"]),
-                              "deferred_replies": list(v["deferred_replies"])}
-                    for k, v in states.items()}
+                              "deferred_replies": list(v["deferred_replies"])} for k, v in states.items()}
 
         def emit(event: str, process: str | None = None, target: str | None = None,
                  message_type: str | None = None, detail: str = "", **extra: Any) -> None:
             rec = {"step": len(trace) + 1, "at_ms": len(trace) * 100, "event": event,
-                   "process": process, "target": target, "message_type": message_type,
-                   "detail": detail, "owner": owner, "processes": snapshot(),
-                   "application_state": dict(record), "message_count": len(messages),
-                   "execution_mode": "simulation"}
+                   "process": process, "target": target, "message_type": message_type, "detail": detail,
+                   "owner": owner, "processes": snapshot(), "application_state": dict(record),
+                   "message_count": len(messages), "execution_mode": "simulation"}
             if message_type:
                 msg = {"id": f"M{len(messages)+1}", "type": message_type, "sender": process,
                        "receiver": target, "timestamp": extra.get("timestamp", 0),
                        "status": "DELIVERED", "step": len(trace) + 1}
                 messages.append(msg)
-                rec["message_id"] = msg["id"]
-                rec["message"] = dict(msg)
+                rec["message_id"], rec["message"] = msg["id"], dict(msg)
             rec.update(extra)
             trace.append(rec)
 
-        # All request messages are generated before their deliveries, so concurrent contention
-        # is visible rather than hidden by sorting into a precomputed grant list.
+        # Create all requests first so the run exposes contention and the later event order.
         for req in requests:
             pid, stamp = req["pid"], req["timestamp"]
             states[pid]["clock"] = max(states[pid]["clock"], stamp) + 1
-            states[pid]["request_timestamp"] = stamp
-            states[pid]["state"] = "REQUESTING"
-            emit("request.created", f"P{pid}", detail=f"P{pid} created a critical-section request.",
+            states[pid]["request_timestamp"], states[pid]["state"] = stamp, "REQUESTING"
+            emit("request.created", f"P{pid}", detail=f"P{pid} creates a critical-section request.",
                  timestamp=stamp, ordering_key=[stamp, pid])
             for peer in range(1, count + 1):
                 if peer != pid:
                     emit("request.sent", f"P{pid}", f"P{peer}", "REQUEST",
                          f"P{pid} multicasts REQUEST to P{peer}.", timestamp=stamp)
+
+        # Peers decide whether to reply immediately or defer to a higher-priority request.
         for req in ordered:
             requester = req["pid"]
             for peer in range(1, count + 1):
                 if peer == requester:
                     continue
                 states[peer]["clock"] = max(states[peer]["clock"], req["timestamp"]) + 1
-                own_state = states[peer]["state"]
-                own_key = priority.get(peer)
+                local_key = priority.get(peer)
                 incoming_key = priority[requester]
-                should_defer = own_state == "IN_CRITICAL_SECTION" or (
-                    own_state == "REQUESTING" and own_key is not None and own_key < incoming_key
-                )
+                defer = states[peer]["state"] == "IN_CRITICAL_SECTION" or (
+                    states[peer]["state"] == "REQUESTING" and local_key is not None and local_key < incoming_key)
                 emit("request.received", f"P{peer}", f"P{requester}",
                      detail=f"P{peer} receives P{requester}'s request.",
-                     incoming_key=list(incoming_key), local_key=list(own_key) if own_key else None)
-                if should_defer:
+                     incoming_key=list(incoming_key), local_key=list(local_key) if local_key else None)
+                if defer:
                     if f"P{requester}" not in states[peer]["deferred_replies"]:
                         states[peer]["deferred_replies"].append(f"P{requester}")
                     emit("reply.deferred", f"P{peer}", f"P{requester}",
-                         detail=f"P{peer} defers its REPLY because its own request has priority.",
-                         incoming_key=list(incoming_key), local_key=list(own_key) if own_key else None)
+                         detail=f"P{peer} defers its REPLY because its own request has higher priority.",
+                         incoming_key=list(incoming_key), local_key=list(local_key) if local_key else None)
                 else:
                     emit("reply.sent", f"P{peer}", f"P{requester}", "REPLY",
                          f"P{peer} replies to P{requester}.", timestamp=states[peer]["clock"])
@@ -805,79 +795,80 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                         states[requester]["replies_received"].append(f"P{peer}")
                     emit("reply.delivered", f"P{requester}", f"P{peer}",
                          detail=f"P{requester} receives REPLY from P{peer}.")
-        # Resolve deferred replies according to request priority, without fabricating missing
-        # replies: the earlier request exits first, then flushes the replies it deferred.
+
+        # Requests are served in the total order. A process may enter only with all replies.
         for req in ordered:
             pid = req["pid"]
-            missing = [peer for peer in range(1, count + 1)
-                       if peer != pid and f"P{peer}" not in states[pid]["replies_received"]]
+            # Replies deferred by peers are released after those peers' earlier critical sections exit.
             for peer in range(1, count + 1):
                 if peer == pid or f"P{pid}" not in states[peer]["deferred_replies"]:
                     continue
-                if f"P{peer}" not in states[pid]["replies_received"]:
+                if f"P{peer}" not in states[pid]["replies_received"] and (
+                    f"P{peer}" not in [f"P{x}" for x in entry_order] or pid > peer):
                     states[peer]["deferred_replies"].remove(f"P{pid}")
                     emit("reply.sent", f"P{peer}", f"P{pid}", "REPLY",
-                         f"P{peer} flushes the REPLY deferred for P{pid}.")
+                         f"P{peer} releases the deferred reply for P{pid}.")
                     states[pid]["replies_received"].append(f"P{peer}")
                     emit("reply.delivered", f"P{pid}", f"P{peer}",
-                         detail=f"P{pid} receives a previously deferred REPLY.")
+                         detail=f"P{pid} receives a deferred REPLY.")
             missing = [peer for peer in range(1, count + 1)
                        if peer != pid and f"P{peer}" not in states[pid]["replies_received"]]
             if missing:
                 emit("request.blocked", f"P{pid}",
-                     detail="Request cannot enter until all peer replies arrive.",
+                     detail="The request cannot enter until every peer REPLY is received.",
                      missing_replies=[f"P{x}" for x in missing])
-                continue
+                # In this offline model, later ordered requests cannot overtake a blocked earlier request.
+                for peer in missing:
+                    peer_id = int(peer)
+                    if f"P{pid}" in states[peer_id]["deferred_replies"]:
+                        states[peer_id]["deferred_replies"].remove(f"P{pid}")
+                        emit("reply.sent", f"P{peer_id}", f"P{pid}", "REPLY",
+                             f"P{peer_id} releases the deferred reply after the earlier request's exit.")
+                        states[pid]["replies_received"].append(peer)
+                        emit("reply.delivered", f"P{pid}", f"P{peer_id}", detail="Deferred REPLY delivered.")
+                missing = [peer for peer in range(1, count + 1)
+                           if peer != pid and f"P{peer}" not in states[pid]["replies_received"]]
+                if missing:
+                    continue
             states[pid]["state"] = "READY"
-            emit("permission.complete", f"P{pid}", detail="All required REPLY messages received.",
+            emit("permission.complete", f"P{pid}", detail="All required peer replies received.",
                  replies_received=list(states[pid]["replies_received"]))
             if owner is not None:
-                raise HTTPException(500, "internal safety invariant violated: overlapping critical-section owners")
+                raise HTTPException(500, "internal safety invariant violated: overlapping owners")
             owner = f"P{pid}"
             states[pid]["state"] = "IN_CRITICAL_SECTION"
             max_owners = max(max_owners, 1)
             entry_order.append(owner)
             emit("critical-section.enter", owner, detail=f"{owner} enters the protected incident-update section.")
             if pid == 1:
-                record["status"] = "ACKNOWLEDGED"
-                operation = "Incident status changed to ACKNOWLEDGED"
+                record["status"], operation = "ACKNOWLEDGED", "Incident status changed to ACKNOWLEDGED"
             elif pid == 2:
-                record["assigned_unit"] = "UNIT-7"
-                operation = "Response unit UNIT-7 assigned"
+                record["assigned_unit"], operation = "UNIT-7", "Response unit UNIT-7 assigned"
             else:
-                record["reservation"] = "RESERVED"
-                operation = "Inventory reserved for INC-1042"
+                record["reservation"], operation = "RESERVED", "Inventory reserved for INC-1042"
             emit("application.operation", owner, detail=operation)
+            # Flush this process's deferred replies as part of its exit transition.
+            deferred = list(states[pid]["deferred_replies"])
             owner = None
-            states[pid]["state"] = "RELEASED"
-            states[pid]["request_timestamp"] = None
-            emit("critical-section.exit", f"P{pid}", detail=f"{owner or f'P{pid}'} releases the protected resource.")
-            # Once this process exits, release replies held for its lower-priority peers.
-            for deferred_peer in list(states[pid]["deferred_replies"]):
-                states[pid]["deferred_replies"].remove(deferred_peer)
-                peer_id = int(deferred_peer[1:])
-                emit("reply.sent", f"P{pid}", deferred_peer, "REPLY",
-                     f"P{pid} sends deferred permission to {deferred_peer}.")
-                if f"P{pid}" not in states[peer_id]["replies_received"]:
-                    states[peer_id]["replies_received"].append(f"P{pid}")
-                emit("reply.delivered", deferred_peer, f"P{pid}",
-                     detail=f"{deferred_peer} receives deferred permission from P{pid}.")
+            states[pid]["state"], states[pid]["request_timestamp"] = "RELEASED", None
+            emit("critical-section.exit", f"P{pid}", detail=f"P{pid} releases the protected resource.")
+            for target in deferred:
+                states[pid]["deferred_replies"].remove(target)
+                target_id = int(target[1:])
+                emit("reply.sent", f"P{pid}", target, "REPLY", f"P{pid} sends deferred permission to {target}.")
+                if f"P{pid}" not in states[target_id]["replies_received"]:
+                    states[target_id]["replies_received"].append(f"P{pid}")
+                emit("reply.delivered", target, f"P{pid}", detail=f"{target} receives deferred permission.")
         checks = {
             "maximum_concurrent_owners_is_one": max_owners <= 1,
             "all_processes_entered_once": len(entry_order) == count and len(set(entry_order)) == count,
             "all_processes_released": all(v["state"] == "RELEASED" for v in states.values()),
-            "all_required_replies_received": all(
-                len(set(v["replies_received"])) == count - 1 for v in states.values()
-            ),
-            "application_updates_inside_section": all(
-                event["event"] != "application.operation" or event["owner"] == event["process"]
-                for event in trace
-            ),
+            "all_required_replies_received": all(len(set(v["replies_received"])) == count - 1 for v in states.values()),
+            "application_updates_inside_section": all(e["event"] != "application.operation" or e["owner"] == e["process"] for e in trace),
         }
         return trace, {"algorithm": "Ricart–Agrawala distributed mutual exclusion", "scenario": scenario,
-                       "grant_order": entry_order, "final_application_state": record,
-                       "final_processes": states, "messages": messages,
-                       "consistency_checks": checks, "max_simultaneous_owners": max_owners,
+                       "grant_order": entry_order, "final_application_state": record, "final_processes": states,
+                       "messages": messages, "consistency_checks": checks, "max_simultaneous_owners": max_owners,
                        "execution_mode": "simulation",
                        "note": "Application state is simulated. No production database row or resource is locked."}
     if lab_id == "beacon":
@@ -900,69 +891,63 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         if fault_mode not in {"crash", "partition", "delay", "recovery"}:
             raise HTTPException(422, "fault_mode must be crash, partition, delay or recovery")
         node = str(parameters.get("node_id", "node-2"))
-        actual_state = "running"
-        observed_state = "healthy"
-        last_received = 0
+        actual_state, observed_state, last_received = "running", "healthy", 0
         trace: list[dict[str, Any]] = []
         def add(event: str, at_ms: int, detail: str, **extra: Any) -> None:
             trace.append({"step": len(trace)+1, "at_ms": at_ms, "event": event, "node": node,
                           "detail": detail, "last_received_ms": last_received,
                           "elapsed_since_heartbeat_ms": max(0, at_ms-last_received),
-                          "miss_count": 0, "actual_state": actual_state,
-                          "observed_state": observed_state, "execution_mode": "simulation", **extra})
-        add("heartbeat.received", 0, "Observer received the initial heartbeat.", sequence=0)
-        fault_at = interval_ms
+                          "actual_state": actual_state, "observed_state": observed_state,
+                          "execution_mode": "simulation", **extra})
+        add("heartbeat.received", 0, "Observer received the initial heartbeat.", sequence=0, miss_count=0)
         if fault_mode == "crash":
             actual_state = "crashed"
-        elif fault_mode == "partition":
-            pass  # Process stays running; delivery path below is blocked.
-        elif fault_mode == "delay":
-            pass
+        loss_every_nth = max(1, round(100 / max(loss, 1))) if loss > 0 else 0
         for miss in range(1, misses + 1):
             expected_at = miss * interval_ms
             arrival_at = expected_at + delay_ms
-            dropped = fault_mode in {"crash", "partition"} or (fault_mode == "delay" and arrival_at > timeout_ms + last_received)
-            if fault_mode == "recovery" and miss > max(1, misses // 2):
+            dropped = fault_mode in {"crash", "partition"}
+            if fault_mode == "delay" and arrival_at - last_received >= timeout_ms:
                 dropped = False
-            if loss and (miss * 10) % 100 < loss:
+            if loss_every_nth and miss % loss_every_nth == 0:
                 dropped = True
-            at = expected_at
+            if fault_mode == "recovery" and miss > misses // 2:
+                dropped = False
             if dropped:
-                elapsed = at-last_received
-                if elapsed >= timeout_ms:
+                if expected_at - last_received >= timeout_ms:
                     observed_state = "suspected"
-                    add("failure.suspected", at, "No heartbeat arrived before the configured timeout; this is suspicion, not proof.",
-                        miss_count=miss, timeout_ms=timeout_ms, decision_reason="timeout elapsed without receipt")
+                    add("failure.suspected", expected_at, "Timeout elapsed without a received heartbeat. This is suspicion, not proof.",
+                        miss_count=miss, timeout_ms=timeout_ms, decision_reason="elapsed time since last receive reached timeout")
                 else:
-                    add("heartbeat.missed", at, "Expected heartbeat was not delivered.", miss_count=miss,
-                        timeout_ms=timeout_ms, decision_reason="no packet received by expected interval")
+                    add("heartbeat.missed", expected_at, "Expected heartbeat was not delivered.",
+                        miss_count=miss, timeout_ms=timeout_ms, decision_reason="no packet received by expected interval")
             else:
-                if arrival_at-last_received >= timeout_ms and observed_state == "healthy":
+                if arrival_at - last_received >= timeout_ms and observed_state == "healthy":
                     observed_state = "suspected"
-                    add("failure.suspected", last_received+timeout_ms, "Timeout elapsed before the delayed packet arrived.",
-                        miss_count=miss, timeout_ms=timeout_ms, decision_reason="timeout crossed while packet in transit")
-                at = arrival_at
-                last_received = at
+                    add("failure.suspected", last_received + timeout_ms, "Timeout crossed while the heartbeat was delayed in transit.",
+                        miss_count=miss, timeout_ms=timeout_ms, decision_reason="in-flight packet arrived after timeout")
+                last_received = arrival_at
                 observed_state = "healthy"
-                add("heartbeat.received", at, "A heartbeat arrived and reset the observer's missed-beat counter.",
+                add("heartbeat.received", arrival_at, "Heartbeat received; observer's last-receive time is reset.",
                     sequence=miss, miss_count=0, timeout_ms=timeout_ms)
         if fault_mode == "recovery" or bool(parameters.get("recover", True)):
             if actual_state == "crashed":
                 actual_state = "running"
-            recover_at = max((trace[-1]["at_ms"] if trace else 0), last_received) + interval_ms
+            recover_at = max(trace[-1]["at_ms"] if trace else 0, last_received) + interval_ms
             last_received = recover_at
             previous = observed_state
             observed_state = "healthy"
-            add("heartbeat.recovered", recover_at, "A fresh heartbeat arrived after recovery; observer returns to healthy.",
+            add("heartbeat.recovered", recover_at, "Fresh heartbeat arrives after recovery.",
                 previous_observed_state=previous, miss_count=0, timeout_ms=timeout_ms)
         final = {"node": node, "actual_state": actual_state, "observed_state": observed_state,
-                 "last_received_ms": last_received, "miss_count": sum(1 for e in trace if e["event"] == "heartbeat.missed"),
+                 "last_received_ms": last_received,
+                 "miss_count": max(0, sum(1 for event in trace if event["event"] in {"heartbeat.missed", "failure.suspected"})),
                  "interval_ms": interval_ms, "timeout_ms": timeout_ms, "network_delay_ms": delay_ms,
                  "packet_loss_percent": loss, "fault_mode": fault_mode}
         return trace, {"algorithm": "Heartbeat/beacon failure detector", "threshold": threshold,
                        "missed_beats": misses, "nodes": {node: final}, "final_state": observed_state,
                        "detection_time_ms": next((e["at_ms"] for e in trace if e["event"] == "failure.suspected"), None),
-                       "false_suspicion": actual_state == "running" and observed_state in {"suspected", "unavailable"},
+                       "false_suspicion": actual_state == "running" and observed_state == "suspected",
                        "execution_mode": "simulation",
                        "note": "Observer state is derived from received heartbeats. A timeout cannot distinguish crash from delay or partition."}
     if lab_id in {"messaging", "stream"}:
