@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import desc
+from sqlalchemy import desc, update
 from sqlalchemy.orm import Session
 from .db import get_db, Resource, Reservation, Incident, EventRecord, ExperimentRun
 
@@ -183,15 +183,39 @@ def reserve_resource(body: ReservationCreate, db: Session = Depends(get_db)):
         raise HTTPException(409, "resource is not available")
     if body.incident_id is not None and db.get(Incident, body.incident_id) is None:
         raise HTTPException(404, "incident not found")
+    # Conditional UPDATE is atomic on PostgreSQL: only one concurrent caller can
+    # transition a given resource from available to reserved.
+    changed = db.execute(update(Resource).where(Resource.id == body.resource_id, Resource.status == "available").values(status="reserved"))
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "resource was reserved by another request")
     row = Reservation(resource_id=resource.id, incident_id=body.incident_id,
                       requested_by=body.requested_by.strip(), status="reserved")
-    resource.status = "reserved"
     db.add(row)
+    db.commit()
+    db.refresh(row)
+    db.refresh(resource)
+    return {"reservation":{"id":row.id,"resource_id":row.resource_id,"incident_id":row.incident_id,
+            "requested_by":row.requested_by,"status":row.status,"created_at":row.created_at.isoformat()},
+            "resource":resource_dict(resource)}
+
+
+@router.post("/reservations/{reservation_id}/release")
+def release_reservation(reservation_id: int, db: Session = Depends(get_db)):
+    row = db.get(Reservation, reservation_id)
+    if row is None:
+        raise HTTPException(404, "reservation not found")
+    if row.status != "reserved":
+        raise HTTPException(409, "reservation is not active")
+    resource = db.get(Resource, row.resource_id)
+    row.status = "released"
+    if resource is not None:
+        resource.status = "available"
     db.commit()
     db.refresh(row)
     return {"reservation":{"id":row.id,"resource_id":row.resource_id,"incident_id":row.incident_id,
             "requested_by":row.requested_by,"status":row.status,"created_at":row.created_at.isoformat()},
-            "resource":resource_dict(resource)}
+            "resource":resource_dict(resource) if resource else None}
 
 @router.get("/reservations")
 def list_reservations(db: Session = Depends(get_db)):
