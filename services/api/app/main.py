@@ -11,12 +11,15 @@ from sqlalchemy import desc
 from .db import init_db, get_db, Incident, EventRecord
 from .broker import publish_event
 from . import labs
+from .advanced import router as advanced_router
 
 app = FastAPI(
     title="AegisGrid API",
     description="Distributed emergency-response coordination and educational distributed-systems labs.",
     version="1.0.0",
 )
+app.include_router(advanced_router)
+
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
