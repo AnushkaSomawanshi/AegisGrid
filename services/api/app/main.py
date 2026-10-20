@@ -245,10 +245,9 @@ def health_ready():
     try:
         with connect_db() as conn:
             conn.execute("SELECT 1")
-        db = True
-    except Exception:
-        db = False
-    return {"status":"ready" if db else "degraded","database":db,"rabbitmq":broker_channel is not None}
+    except Exception as exc:
+        raise HTTPException(503, {"status": "degraded", "database": False, "rabbitmq": broker_channel is not None, "reason": str(exc)})
+    return {"status":"ready","database":True,"rabbitmq":broker_channel is not None}
 
 @app.get("/api/overview")
 def overview():
@@ -515,9 +514,8 @@ def init_snapshot():
     pids = ["P1", "P2", "P3"]
     return {
         "processes": {p: {"counter": 0, "recorded": False, "snapshot_state": None, "sent_messages": [], "received_messages": [], "snapshot_sent_messages": [], "snapshot_received_messages": []} for p in pids},
-        "channels": [{"from": "P1", "to": "P2", "recording": False, "snapshot_messages": []},
-                     {"from": "P2", "to": "P3", "recording": False, "snapshot_messages": []},
-                     {"from": "P3", "to": "P1", "recording": False, "snapshot_messages": []}],
+        "channels": [{"from": src, "to": dst, "recording": False, "snapshot_messages": []}
+                     for src in pids for dst in pids if src != dst],
         "messages": {}, "marker_queue": [], "events": [], "status": "READY",
         "initiator": None, "snapshot_complete": False, "consistency": None,
         "note": "Marker/channel recording is explicitly modelled for this educational simulation."
@@ -677,7 +675,8 @@ def snapshot_reset():
 
 # ---------- Election lab: deterministic Bully algorithm trace ----------
 def init_election():
-    return {"nodes":[{"id":f"P{i}","priority":i,"available":True,"state":"FOLLOWER"} for i in range(1,6)],"coordinator":"P5","events":[{"kind":"coordinator.initialized","process_id":"P5","at":utcnow()}],"round":0}
+    nodes=[{"id":f"P{i}","priority":i,"available":True,"state":"COORDINATOR" if i==5 else "FOLLOWER"} for i in range(1,6)]
+    return {"nodes":nodes,"coordinator":"P5","events":[{"kind":"coordinator.initialized","process_id":"P5","at":utcnow()}],"round":0}
 
 def run_bully_election(lab, initiator):
     candidates=[n for n in lab["nodes"] if n["available"]]
@@ -929,13 +928,13 @@ def labs_index():
     return [
       {"id":"clock-sync","name":"Physical Clock Synchronization","status":"IMPLEMENTED","mode":"simulation","endpoint":"/api/labs/clock-sync"},
       {"id":"lamport","name":"Logical Clocks and Lamport Algorithm","status":"IMPLEMENTED","mode":"simulation","endpoint":"/api/labs/lamport"},
-      {"id":"global-snapshot","name":"Global State Snapshot","status":"FOUNDATION","mode":"educational-model","endpoint":"/api/labs/global-snapshot"},
+      {"id":"global-snapshot","name":"Global State Snapshot","status":"IMPLEMENTED","mode":"marker/channel educational simulation","endpoint":"/api/labs/global-snapshot"},
       {"id":"vector","name":"Vector Clocks and Causality","status":"IMPLEMENTED","mode":"simulation","endpoint":"/api/labs/vector"},
-      {"id":"election","name":"Leader Election","status":"FOUNDATION","mode":"educational-model","endpoint":"/api/labs/election"},
-      {"id":"mutual-exclusion","name":"Mutual Exclusion","status":"FOUNDATION","mode":"educational-model","endpoint":"/api/labs/mutual-exclusion"},
-      {"id":"beacons","name":"Beacon Failure Detection","status":"FOUNDATION","mode":"educational-model","endpoint":"/api/labs/beacons"},
-      {"id":"messaging","name":"Message-Oriented Communication","status":"BROKER-INTEGRATION","mode":"rabbitmq","endpoint":"/api/events"},
-      {"id":"streaming","name":"Stream-Oriented Communication","status":"IMPLEMENTED","mode":"websocket","endpoint":"/ws/events"},
+      {"id":"election","name":"Leader Election","status":"IMPLEMENTED","mode":"Bully algorithm message-trace simulation","endpoint":"/api/labs/election"},
+      {"id":"mutual-exclusion","name":"Mutual Exclusion","status":"IMPLEMENTED","mode":"Ricart–Agrawala request/reply simulation","endpoint":"/api/labs/mutual-exclusion"},
+      {"id":"beacons","name":"Beacon Failure Detection","status":"IMPLEMENTED","mode":"deterministic beacon timeout model","endpoint":"/api/labs/beacons"},
+      {"id":"messaging","name":"Message-Oriented Communication","status":"IMPLEMENTED","mode":"RabbitMQ publisher and audit consumer","endpoint":"/api/messaging/status"},
+      {"id":"streaming","name":"Stream-Oriented Communication","status":"IMPLEMENTED","mode":"generated telemetry over WebSocket","endpoint":"/ws/telemetry"},
       {"id":"infrastructure","name":"Docker and Kubernetes","status":"DOCUMENTED","mode":"runtime-observation","endpoint":"/health/ready"}
     ]
 
