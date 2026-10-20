@@ -112,16 +112,61 @@ The dedicated Global State Capture Studio is a dark, responsive operations dashb
 - This is a deterministic teaching simulation, not a live snapshot of the API, database, RabbitMQ or Kubernetes.
 - Channel capture is derived from modeled event order; callers do not provide a pre-labelled final in-transit message list.
 
-## 4. Vector clocks
+## 4. Vector clocks — execution studio
 
-### Comparison
-Given vectors A and B, A happened-before B when every component of A is less than or equal to the corresponding component of B, and at least one component is strictly lower. If neither vector dominates the other, the events are concurrent in the vector-clock model.
+### Page design
 
-### Demonstration
-The sample uses three components [P1, P2, P3]. It highlights a pair where one vector dominates another and pairs where vectors are incomparable.
+The dedicated Vector Clock Execution Studio is a responsive, dark operations dashboard rather than a theory page. It contains execution metrics, three process cards with vector components, directed message cards with send timestamps, an event ledger, a calculation inspector, an event-comparison workbench, a causal-edge ledger and a final JSON evidence panel.
 
-### Discussion
-Vector clocks can express concurrency that scalar Lamport clocks cannot distinguish. Their metadata grows with the number of participants and dynamic membership requires a carefully designed representation.
+### Process identities and component order
+
+The teaching scenario uses a fixed component order `[P1, P2, P3]`:
+- P1 — Incident & Dispatch
+- P2 — Resource Coordination
+- P3 — Inventory & Monitoring
+
+All process vectors begin at `[0, 0, 0]`. A vector shown on the page is reconstructed from the executed trace up to the persisted execution cursor. A future event can be inspected without advancing its process clock.
+
+### Default event schedule
+
+| Event | Process | Operation | Resulting vector |
+|---|---|---|---|
+| E1 | P1 | Create incident | `[1, 0, 0]` |
+| E2 | P1 | Send M1 to P2 | `[2, 0, 0]` |
+| E3 | P2 | Receive M1 | `[2, 1, 0]` |
+| E4 | P2 | Allocate response unit | `[2, 2, 0]` |
+| E5 | P3 | Independent inventory check | `[0, 0, 1]` |
+| E6 | P2 | Send M2 to P3 | `[2, 3, 0]` |
+| E7 | P3 | Receive M2 | `[2, 3, 2]` |
+| E8 | P1 | Independent dispatch update | `[3, 0, 0]` |
+
+These vectors are calculated by the backend from the ordered event schedule. They are not hard-coded frontend display values.
+
+### Execution rules
+
+- **Local event:** increment the component for the process executing the event.
+- **Send:** increment the sender's component and attach a copy of the resulting vector to the message.
+- **Receive:** merge the local and message vectors component-wise using the maximum, then increment the receiver's component.
+- **Causality:** add process-order edges and message send-to-receive edges. The list position alone is not treated as proof of causality.
+- **Comparison:** A strictly dominates B when all components of A are less than or equal to B and at least one is lower. The reverse relation is tested symmetrically. Incomparable vectors are concurrent; equal vectors are reported separately.
+
+### Presets and controls
+
+- Basic message exchange: local events, send timestamps and receive merge.
+- Independent processes: three processes without message exchange.
+- Multi-hop causality: propagate a causal history from P1 through P2 to P3.
+- Concurrent updates: compare causally related events with an independent process event.
+- Create a persisted run, advance one event, run the trace, pause/resume, reset the cursor and export JSON.
+- Select any two executed events in the comparison workbench to view their vectors and relation.
+- Inspect the event calculation, message timestamp, component-wise merge, resulting vector and causal predecessors.
+
+### Evidence and tests
+
+The result includes final process vectors, message IDs, sender/receiver, send-event references, attached message vectors, causal edges, pairwise event comparisons and concurrent pairs. Backend tests cover the default vector trace, receive merge, independent concurrency, multi-hop causal propagation, unknown messages and wrong-recipient delivery.
+
+### Limitations
+
+This is a deterministic teaching simulation. Process names are logical identities and do not claim to be deployed AegisGrid service processes. Vector timestamps are not wall-clock timestamps, and the page does not instrument live network messages or runtime state. The first version uses a fixed three-process component order; dynamic membership and vector compression are outside its scope.
 
 ## 5. Leader election — Bully algorithm model
 
