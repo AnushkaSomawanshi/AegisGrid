@@ -98,3 +98,22 @@ def test_beacon_simulation_and_forensics():
     assert report.status_code == 200
     assert report.json()["incident"]["id"] == incident_id
     assert len(report.json()["nodes"]) >= 1
+
+
+def test_each_workbench_lab_creates_a_nonempty_trace():
+    labs = ["physical-clock", "lamport", "snapshot", "vector", "election", "mutex", "beacon", "messaging", "stream", "scaling"]
+    for lab_id in labs:
+        response = client.post("/api/experiments", json={
+            "lab_id": lab_id, "scenario": "acceptance-" + lab_id, "parameters": {}
+        })
+        assert response.status_code == 201, lab_id
+        run = response.json()["run"]
+        assert run["trace"], lab_id
+        assert run["result"].get("execution_mode") in {"simulation", "workflow_template", "runbook"}, lab_id
+
+
+def test_clock_lab_rejects_malformed_offsets():
+    response = client.post("/api/experiments", json={
+        "lab_id": "physical-clock", "scenario": "invalid", "parameters": {"offsets": []}
+    })
+    assert response.status_code == 422
