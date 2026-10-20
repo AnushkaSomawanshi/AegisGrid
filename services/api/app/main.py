@@ -17,8 +17,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://aegisgrid:local-dev-only-change-me@localhost:5433/aegisgrid")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+DATABASE_URL = os.getenv("DATABASE_URL")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5433")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "aegisgrid")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "aegisgrid")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "local-dev-only-change-me")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://aegisgrid:local-dev-rabbitmq-only@localhost:5672/")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 db_lock = asyncio.Lock()
@@ -35,7 +40,11 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 def connect_db():
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=3)
+    url = DATABASE_URL or (
+        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
+        f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    )
+    return psycopg.connect(url, row_factory=dict_row, connect_timeout=3)
 
 def init_db():
     with connect_db() as conn:
