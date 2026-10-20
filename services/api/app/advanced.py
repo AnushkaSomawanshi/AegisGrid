@@ -192,40 +192,117 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                        "note": "Offsets and delays are synthetic. Delay is trace metadata, not a packet-level delay estimator."}
     if lab_id == "lamport":
         operations = parameters.get("operations", [
-            {"process":"P1","kind":"local","label":"create incident"},
-            {"process":"P1","kind":"send","label":"send dispatch request","message_id":"m1"},
-            {"process":"P2","kind":"receive","label":"receive dispatch request","message_id":"m1","message_clock":2},
-            {"process":"P2","kind":"local","label":"assign response unit"},
-            {"process":"P3","kind":"local","label":"independent inventory refresh"},
+            {"process":"P1","kind":"local","label":"create incident","event_id":"E1"},
+            {"process":"P1","kind":"send","label":"send dispatch request","message_id":"M1","to":"P2","event_id":"E2"},
+            {"process":"P2","kind":"receive","label":"receive dispatch request","message_id":"M1","from":"P1","event_id":"E3"},
+            {"process":"P2","kind":"local","label":"assign response unit","event_id":"E4"},
+            {"process":"P3","kind":"local","label":"independent inventory refresh","event_id":"E5"},
         ])
         if not isinstance(operations, list) or not operations or len(operations) > 100:
             raise HTTPException(422, "operations must be a list of 1 to 100 events")
+
         clocks: dict[str, int] = {}
-        trace = []
+        last_event_by_process: dict[str, str] = {}
+        sent_messages: dict[str, dict[str, Any]] = {}
+        used_event_ids: set[str] = set()
+        trace: list[dict[str, Any]] = []
+        process_names: dict[str, str] = {}
         for index, operation in enumerate(operations):
             if not isinstance(operation, dict):
                 raise HTTPException(422, "each operation must be an object")
-            process = str(operation.get("process", "P1"))
-            kind = str(operation.get("kind", "local"))
+            process = operation.get("process", "P1")
+            kind = operation.get("kind", "local")
+            if not isinstance(process, str) or not process.strip() or len(process) > 40:
+                raise HTTPException(422, "process must be a non-empty string of at most 40 characters")
             if kind not in {"local", "send", "receive"}:
                 raise HTTPException(422, "Lamport event kind must be local, send, or receive")
+            process = process.strip()
+            event_id = operation.get("event_id", f"E{index + 1}")
+            if not isinstance(event_id, str) or not event_id.strip() or len(event_id) > 40 or event_id in used_event_ids:
+                raise HTTPException(422, "event_id must be a unique non-empty string of at most 40 characters")
+            event_id = event_id.strip()
+            label = operation.get("label", kind.replace("_", " "))
+            if not isinstance(label, str) or not label.strip() or len(label) > 160:
+                raise HTTPException(422, "label must be a non-empty string of at most 160 characters")
+            used_event_ids.add(event_id)
+            process_names.setdefault(process, str(operation.get("process_name", process)))
             before = clocks.get(process, 0)
+            previous_event = last_event_by_process.get(process)
+            causal_predecessors = [previous_event] if previous_event else []
+            item: dict[str, Any] = {
+                "step": index + 1, "event_id": event_id, "process": process,
+                "process_name": process_names[process], "event": kind, "label": label.strip(),
+                "clock_before": before, "clock_after": before + 1,
+                "causal_predecessors": causal_predecessors, "execution_mode": "simulation"
+            }
             if kind == "receive":
-                message_clock = int(operation.get("message_clock", 0))
+                message_id = operation.get("message_id")
+                if not isinstance(message_id, str) or not message_id.strip():
+                    raise HTTPException(422, "receive events require a message_id that matches an earlier send")
+                message_id = message_id.strip()
+                sent = sent_messages.get(message_id)
+                if sent is None:
+                    raise HTTPException(422, f"receive event {event_id} references message {message_id!r} without an earlier send")
+                expected_sender = operation.get("from")
+                if expected_sender is not None and expected_sender != sent["sender"]:
+                    raise HTTPException(422, f"receive event {event_id} sender does not match message {message_id!r}")
+                expected_receiver = sent.get("receiver")
+                if expected_receiver is not None and expected_receiver != process:
+                    raise HTTPException(422, f"message {message_id!r} was sent to {expected_receiver!r}, not {process!r}")
+                message_clock = sent["message_clock"]
                 after = max(before, message_clock) + 1
-            else:
-                message_clock = None
+                item.update({
+                    "clock_before": before, "clock_after": after, "message_id": message_id,
+                    "message_clock": message_clock, "sender": sent["sender"],
+                    "calculation": f"max({before}, {message_clock}) + 1 = {after}",
+                    "causal_predecessors": list(dict.fromkeys(causal_predecessors + [sent["event_id"]]))
+                })
+            elif kind == "send":
+                message_id = operation.get("message_id", f"M{index + 1}")
+                receiver = operation.get("to")
+                if not isinstance(message_id, str) or not message_id.strip() or len(message_id) > 80:
+                    raise HTTPException(422, "send events require a non-empty message_id of at most 80 characters")
+                message_id = message_id.strip()
+                if message_id in sent_messages:
+                    raise HTTPException(422, f"message_id {message_id!r} is sent more than once; message IDs must be unique")
+                if receiver is not None and (not isinstance(receiver, str) or not receiver.strip()):
+                    raise HTTPException(422, "send event 'to' must be a non-empty process ID when supplied")
                 after = before + 1
+                item.update({
+                    "clock_before": before, "clock_after": after, "message_id": message_id,
+                    "message_clock": after, "receiver": receiver.strip() if isinstance(receiver, str) else None,
+                    "calculation": f"{before} + 1 = {after}"
+                })
+                sent_messages[message_id] = {
+                    "sender": process, "receiver": item["receiver"], "message_clock": after, "event_id": event_id
+                }
+            else:
+                after = before + 1
+                item["calculation"] = f"{before} + 1 = {after}"
             clocks[process] = after
-            item = {"step":index+1,"process":process,"event":kind,"label":str(operation.get("label", kind)),
-                    "clock_before":before,"clock_after":after}
-            if message_clock is not None:
-                item["message_clock"] = message_clock
-            if kind == "send":
-                item["message_id"] = str(operation.get("message_id", "m"+str(index+1)))
+            last_event_by_process[process] = event_id
             trace.append(item)
-        return trace, {"algorithm":"Lamport logical clock","final_process_clocks":clocks,
-                       "receive_rule":"max(local_clock, message_clock) + 1","execution_mode":"simulation"}
+
+        # Include an explicit event-to-event relation list. A process-order edge and a
+        # send-to-receive edge encode happens-before; the list order alone does not.
+        edges = []
+        for event in trace:
+            for predecessor in event["causal_predecessors"]:
+                relation = "message" if event.get("event") == "receive" and predecessor == next(
+                    (sent["event_id"] for sent in sent_messages.values() if sent["event_id"] == predecessor), None
+                ) and event.get("message_id") in sent_messages and sent_messages[event["message_id"]]["event_id"] == predecessor else "process-order"
+                edges.append({"from": predecessor, "to": event["event_id"], "relation": relation})
+        return trace, {
+            "algorithm": "Lamport logical clock", "final_process_clocks": clocks,
+            "processes": [{"process": key, "final_clock": value} for key, value in clocks.items()],
+            "messages": [{"message_id": key, "sender": value["sender"], "receiver": value["receiver"],
+                          "message_clock": value["message_clock"], "send_event_id": value["event_id"]}
+                         for key, value in sent_messages.items()],
+            "causal_edges": edges,
+            "receive_rule": "max(local_clock, message_clock) + 1",
+            "execution_mode": "simulation",
+            "note": "Logical timestamps express causal ordering; they are not wall-clock time and do not order independent concurrent events."
+        }
     if lab_id == "snapshot":
         processes = parameters.get("processes", ["P1", "P2", "P3"])
         initiator = str(parameters.get("initiator", "P1"))
