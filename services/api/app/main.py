@@ -1,4 +1,5 @@
 """AegisGrid API gateway and concept lab endpoints."""
+import asyncio
 import json
 import os
 from datetime import datetime, timezone
@@ -231,6 +232,34 @@ def get_lab(lab_id: str):
         raise HTTPException(404, "unknown lab; see GET /api/concepts")
     return handler()
 
+
+
+@app.websocket("/ws/telemetry")
+async def websocket_telemetry(websocket: WebSocket):
+    """Real WebSocket transport carrying explicitly synthetic, sequenced demo telemetry."""
+    await websocket.accept()
+    sequence = 0
+    try:
+        await websocket.send_json({"type":"connected","mode":"synthetic-demo","message":"Telemetry stream connected"})
+        while True:
+            frame = {"type":"telemetry","mode":"synthetic-demo","sequence":sequence,
+                     "at":datetime.now(timezone.utc).isoformat(),
+                     "load_pct":round(35 + ((sequence * 17) % 47), 1),
+                     "queue_depth":(sequence * 7) % 23,
+                     "node":"worker-demo-1"}
+            await websocket.send_json(frame)
+            sequence += 1
+            try:
+                command = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                if command == "close":
+                    await websocket.close(code=1000)
+                    return
+                if command == "ping":
+                    await websocket.send_json({"type":"pong","at":datetime.now(timezone.utc).isoformat()})
+            except asyncio.TimeoutError:
+                pass
+    except WebSocketDisconnect:
+        return
 
 @app.websocket("/ws/events")
 async def websocket_events(websocket: WebSocket):
