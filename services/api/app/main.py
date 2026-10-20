@@ -37,7 +37,7 @@ broker_channel: aio_pika.abc.AbstractRobustChannel | None = None
 subscribers: set[WebSocket] = set()
 telemetry_subscribers: set[WebSocket] = set()
 telemetry_sequence = 0
-broker_metrics: dict[str, int] = {"consumed": 0, "errors": 0}
+broker_metrics: dict[str, int] = {"published": 0, "publish_errors": 0}
 state: dict[str, Any] = {
     "clock_sync": None, "lamport": None, "global_snapshot": None,
     "vector": None, "election": None, "mutual_exclusion": None,
@@ -81,6 +81,13 @@ def init_db():
           CREATE TABLE IF NOT EXISTS broker_deliveries (
             id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, event_type TEXT NOT NULL,
             payload JSONB NOT NULL, consumed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        """)
+        conn.execute("""
+          CREATE TABLE IF NOT EXISTS worker_status (
+            worker_name TEXT PRIMARY KEY, status TEXT NOT NULL,
+            last_heartbeat TIMESTAMPTZ, processed_count BIGINT NOT NULL DEFAULT 0,
+            error_count BIGINT NOT NULL DEFAULT 0, last_error TEXT
           )
         """)
         conn.commit()
@@ -130,23 +137,6 @@ async def broadcast(message: dict[str, Any]):
     for ws in dead:
         subscribers.discard(ws)
 
-async def consume_broker_message(message: aio_pika.abc.AbstractIncomingMessage):
-    async with message.process(requeue=False):
-        try:
-            event = json.loads(message.body.decode("utf-8"))
-            with connect_db() as conn:
-                conn.execute(
-                    "INSERT INTO broker_deliveries(id,trace_id,event_type,payload) VALUES(%s,%s,%s,%s) ON CONFLICT(id) DO NOTHING",
-                    (event.get("id", str(uuid.uuid4())), event.get("trace_id", "unknown"),
-                     event.get("event_type", "unknown"), json.dumps(event))
-                )
-                conn.commit()
-            broker_metrics["consumed"] += 1
-            await broadcast({"type": "broker.delivery", "data": {"id": event.get("id"), "event_type": event.get("event_type"), "trace_id": event.get("trace_id"), "consumed_at": utcnow()}})
-        except Exception:
-            broker_metrics["errors"] += 1
-            raise
-
 async def telemetry_loop():
     global telemetry_sequence
     while True:
@@ -188,10 +178,7 @@ async def lifespan(app: FastAPI):
         broker_connection = await aio_pika.connect_robust(broker_url, timeout=4)
         broker_channel = await broker_connection.channel()
         await broker_channel.set_qos(prefetch_count=20)
-        exchange = await broker_channel.declare_exchange("aegisgrid.events", aio_pika.ExchangeType.TOPIC, durable=True)
-        queue = await broker_channel.declare_queue("aegisgrid.audit", durable=True)
-        await queue.bind(exchange, routing_key="#")
-        await queue.consume(consume_broker_message)
+        await broker_channel.declare_exchange("aegisgrid.events", aio_pika.ExchangeType.TOPIC, durable=True)
     except Exception:
         broker_connection = None
         broker_channel = None
@@ -332,11 +319,16 @@ async def messaging_status():
         with connect_db() as conn:
             deliveries = conn.execute("SELECT count(*) AS count FROM broker_deliveries").fetchone()["count"]
             recent = conn.execute("SELECT id,trace_id,event_type,consumed_at FROM broker_deliveries ORDER BY consumed_at DESC LIMIT 20").fetchall()
+            worker = conn.execute("SELECT worker_name,status,last_heartbeat,processed_count,error_count,last_error FROM worker_status WHERE worker_name='event-worker'").fetchone()
         recent_out = [{**dict(x), "consumed_at": x["consumed_at"].isoformat()} for x in recent]
+        worker_out = dict(worker) if worker else None
+        if worker_out and worker_out.get("last_heartbeat"):
+            worker_out["last_heartbeat"] = worker_out["last_heartbeat"].isoformat()
     except Exception:
         deliveries = 0
         recent_out = []
-    return {"broker_connected": broker_channel is not None, "consumer_metrics": broker_metrics, "deliveries_persisted": deliveries, "queue": queue_data, "recent_deliveries": recent_out}
+        worker_out = None
+    return {"broker_connected": broker_channel is not None, "publisher_metrics": broker_metrics, "worker": worker_out, "deliveries_persisted": deliveries, "queue": queue_data, "recent_deliveries": recent_out}
 
 @app.post("/api/messaging/publish")
 async def messaging_publish(body: EventAction):
