@@ -140,3 +140,15 @@ def test_experiment_pause_resume_and_simulated_fault():
     assert injected.status_code == 200
     assert injected.json()["event"]["event"] == "fault.injected"
     assert injected.json()["run"]["result"]["injected_fault"]["execution_mode"] == "simulation"
+
+
+def test_telemetry_websocket_emits_sequenced_synthetic_frames():
+    with client.websocket_connect("/ws/telemetry") as websocket:
+        connected = websocket.receive_json()
+        first = websocket.receive_json()
+        second = websocket.receive_json()
+        assert connected["type"] == "connected"
+        assert connected["mode"] == "synthetic-demo"
+        assert first["sequence"] == 0
+        assert second["sequence"] == 1
+        assert first["type"] == "telemetry"
