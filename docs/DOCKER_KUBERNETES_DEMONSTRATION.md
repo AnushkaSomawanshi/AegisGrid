@@ -26,7 +26,8 @@ docker compose ps
 Expected service set:
 - `frontend`: React static bundle served by Nginx, host port 3000.
 - `api`: FastAPI, host port 8000.
-- `worker`: independent RabbitMQ consumer process.
+- `worker`: independent RabbitMQ consumer process with stable-event-ID deduplication.
+- `outbox-dispatcher`: independent poller that retries pending outbox messages after broker failures.
 - `postgres`: persistent SQL state in named volume `aegisgrid-db`.
 - `rabbitmq`: durable queue and local management interface on port 15672.
 
@@ -79,7 +80,7 @@ Attempt a second reservation for the same resource. The API should return HTTP 4
 
 ```bash
 curl -sS -X POST http://localhost:8000/api/events/demo
-docker compose logs --tail=100 api worker rabbitmq
+docker compose logs --tail=100 api worker outbox-dispatcher rabbitmq
 curl -fsS http://localhost:8000/api/events
 ```
 
@@ -252,7 +253,7 @@ Repeat three times and report the median and range. A Deployment replaces Pods; 
 kubectl get deploy,pods,svc,pvc -n aegisgrid
 kubectl describe deployment aegisgrid-api -n aegisgrid
 kubectl logs deployment/aegisgrid-api -n aegisgrid --tail=100
-kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100
+kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100\nkubectl logs deployment/aegisgrid-outbox-dispatcher -n aegisgrid --tail=100
 kubectl get events -n aegisgrid --sort-by=.lastTimestamp
 ```
 
