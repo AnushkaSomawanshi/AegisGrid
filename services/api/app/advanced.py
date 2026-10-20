@@ -591,11 +591,22 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             "multiple-failures": ([4, 5], 2, 5),
             "coordinator-recovery": ([], 5, 4),
         }
+        # Preserve compatibility with the original workbench's failed_node/node_ids payload.
+        legacy_ids = parameters.get("node_ids", [1, 2, 3, 4, 5])
+        legacy_failed = parameters.get("failed_node")
+        if scenario not in presets and scenario.startswith("acceptance-"):
+            scenario = "coordinator-failure"
         if scenario not in presets:
             raise HTTPException(422, "unknown election scenario")
         default_failed, default_initiator, old_leader = presets[scenario]
-        failed = parameters.get("failed_nodes", default_failed)
+        failed = parameters.get("failed_nodes", ([legacy_failed] if legacy_failed is not None else default_failed))
         initiator = parameters.get("initiator", default_initiator)
+        if legacy_failed is not None and "failed_nodes" not in parameters and "initiator" not in parameters:
+            active_legacy = [n for n in legacy_ids if n not in failed]
+            if not active_legacy:
+                raise HTTPException(422, "at least one process must be active")
+            initiator = max(active_legacy[:-1], default=active_legacy[0])
+            old_leader = max(legacy_ids)
         if (not isinstance(failed, list) or any(type(n) is not int or n not in range(1, 6) for n in failed)
                 or len(set(failed)) != len(failed) or type(initiator) is not int or initiator not in range(1, 6)):
             raise HTTPException(422, "failed_nodes and initiator must reference unique P1-P5 IDs")
