@@ -54,3 +54,46 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+class Resource(Base):
+    """A dispatchable unit, facility, vehicle, or supply pool."""
+    __tablename__ = "resources"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(180), index=True)
+    kind: Mapped[str] = mapped_column(String(50), index=True)
+    region: Mapped[str] = mapped_column(String(120), default="Unassigned")
+    status: Mapped[str] = mapped_column(String(30), default="available", index=True)
+    capacity: Mapped[int] = mapped_column(Integer, default=1)
+    available: Mapped[int] = mapped_column(Integer, default=1)
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class Reservation(Base):
+    """Durable reservation record; available capacity is decremented in the same DB transaction."""
+    __tablename__ = "reservations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    resource_id: Mapped[int] = mapped_column(Integer, index=True)
+    incident_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    requested_by: Mapped[str] = mapped_column(String(120), default="command-centre")
+    units: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(30), default="reserved", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExperimentRun(Base):
+    """Persisted lab execution and evidence; trace/result are JSON serialized for portability."""
+    __tablename__ = "experiment_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    lab_id: Mapped[str] = mapped_column(String(80), index=True)
+    scenario: Mapped[str] = mapped_column(String(160), default="default")
+    status: Mapped[str] = mapped_column(String(30), default="ready", index=True)
+    step_index: Mapped[int] = mapped_column(Integer, default=0)
+    parameters: Mapped[str] = mapped_column(Text, default="{}")
+    trace: Mapped[str] = mapped_column(Text, default="[]")
+    result: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
