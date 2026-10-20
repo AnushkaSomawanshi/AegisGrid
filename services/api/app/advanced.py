@@ -141,6 +141,12 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         trace = []
         def add(event: str, **fields: Any) -> None:
             trace.append({"step": len(trace) + 1, "event": event, **fields, "execution_mode": "simulation"})
+        nodes[0]["reported_offset_ms"] = nodes[0]["offset_ms"]
+        nodes[0]["status"] = "reported"
+        # Keep the legacy node label for the existing workbench API contract while
+        # exposing the explicit coordinator ID used by the detailed demonstration.
+        add("clock.coordinator.sampled", node="node-1", node_id="C0",
+            reported_offset_ms=nodes[0]["offset_ms"])
         for node in nodes:
             if node["node"] == "C0":
                 continue
@@ -153,12 +159,6 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                     reported_offset_ms=node["offset_ms"], message_delay_ms=delay_ms)
                 node["reported_offset_ms"] = node["offset_ms"]
                 node["status"] = "reported"
-        if "C0" not in excluded_set:
-            nodes[0]["reported_offset_ms"] = nodes[0]["offset_ms"]
-            nodes[0]["status"] = "reported"
-            add("clock.coordinator.sampled", node="C0", reported_offset_ms=nodes[0]["offset_ms"])
-        else:
-            add("clock.coordinator.unavailable", node="C0", decision="coordinator-reading-excluded")
         reported = [n for n in participants if n["reported_offset_ms"] is not None]
         if not reported:
             raise HTTPException(422, "no clock readings were received; synchronization round cannot complete")
