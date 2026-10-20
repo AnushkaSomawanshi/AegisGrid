@@ -20,8 +20,9 @@ const presets:Record<string,{label:string;description:string;operations:Record<s
   {event_id:"E4",process:"P1",kind:"local",label:"More sender work"},
   {event_id:"E5",process:"P1",kind:"local",label:"Final sender work"},
   {event_id:"E6",process:"P1",kind:"local",label:"Prepare message"},
-  {event_id:"E7",process:"P1",kind:"send",label:"Send high-timestamp message",message_id:"M8",to:"P2"},
-  {event_id:"E8",process:"P2",kind:"receive",label:"Receive message",message_id:"M8",from:"P1"}
+  {event_id:"E7",process:"P1",kind:"local",label:"One more sender event"},
+  {event_id:"E8",process:"P1",kind:"send",label:"Send high-timestamp message",message_id:"M8",to:"P2"},
+  {event_id:"E9",process:"P2",kind:"receive",label:"Receive message",message_id:"M8",from:"P1"}
  ]},
  independent:{label:"Independent processes",description:"Each process advances independently; no message edge connects the lanes.",operations:[
   {event_id:"E1",process:"P1",kind:"local",label:"Accept incident"},
