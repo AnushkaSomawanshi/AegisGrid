@@ -319,6 +319,39 @@ async def update_incident_status(incident_id: str, body: dict[str,str]):
     await publish_event("Incident.StatusChanged",result,incident_id)
     return result
 
+@app.get("/api/messaging/status")
+async def messaging_status():
+    queue_data = {"available": False, "queue": "aegisgrid.audit", "messages_ready": None, "consumers": None}
+    if broker_channel is not None:
+        try:
+            queue = await broker_channel.declare_queue("aegisgrid.audit", passive=True)
+            result = queue.declaration_result
+            queue_data = {"available": True, "queue": "aegisgrid.audit", "messages_ready": result.message_count, "consumers": result.consumer_count}
+        except Exception as exc:
+            queue_data["error"] = str(exc)
+    try:
+        with connect_db() as conn:
+            deliveries = conn.execute("SELECT count(*) AS count FROM broker_deliveries").fetchone()["count"]
+            recent = conn.execute("SELECT id,trace_id,event_type,consumed_at FROM broker_deliveries ORDER BY consumed_at DESC LIMIT 20").fetchall()
+        recent_out = [{**dict(x), "consumed_at": x["consumed_at"].isoformat()} for x in recent]
+    except Exception:
+        deliveries = 0
+        recent_out = []
+    return {"broker_connected": broker_channel is not None, "consumer_metrics": broker_metrics, "deliveries_persisted": deliveries, "queue": queue_data, "recent_deliveries": recent_out}
+
+@app.post("/api/messaging/publish")
+async def messaging_publish(body: EventAction):
+    payload = {"message": body.message or "AegisGrid messaging test event", "operator_value": body.value or "manual-test", "source_process": body.process_id}
+    event = await publish_event("Lab.Messaging.Probe", payload)
+    return {"published_event": event, "broker_connected": broker_channel is not None, "note": "Check the audit consumer delivery record to verify broker consumption."}
+
+@app.get("/api/messaging/deliveries")
+def messaging_deliveries(limit: int = 100):
+    limit = max(1, min(limit, 500))
+    with connect_db() as conn:
+        rows = conn.execute("SELECT * FROM broker_deliveries ORDER BY consumed_at DESC LIMIT %s", (limit,)).fetchall()
+    return [{**dict(x), "consumed_at": x["consumed_at"].isoformat()} for x in rows]
+
 @app.get("/api/events")
 def get_events(limit: int=100):
     limit=max(1,min(limit,500))
@@ -330,6 +363,17 @@ def get_events(limit: int=100):
         item["happened_at"]=item["happened_at"].isoformat()
         out.append(item)
     return out
+
+@app.websocket("/ws/telemetry")
+async def telemetry_stream(ws: WebSocket):
+    await ws.accept()
+    telemetry_subscribers.add(ws)
+    try:
+        await ws.send_json({"type": "connection", "data": {"status": "connected", "stream": "generated-simulated-telemetry", "time": utcnow()}})
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        telemetry_subscribers.discard(ws)
 
 @app.websocket("/ws/events")
 async def event_stream(ws: WebSocket):
