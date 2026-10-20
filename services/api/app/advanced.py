@@ -841,25 +841,142 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         trace.append({"step":len(trace)+1,"event":"heartbeat.recovered","node":"node-2","state":"healthy"})
         return trace, {"algorithm":"Heartbeat suspicion model","threshold":threshold,"missed_beats":misses,
                        "final_state":"healthy","execution_mode":"simulation"}
-    if lab_id == "messaging":
-        trace = [
-            {"step":1,"event":"api.accepted","detail":"API validates event envelope"},
-            {"step":2,"event":"database.recorded","detail":"Event ledger write committed"},
-            {"step":3,"event":"broker.published","detail":"RabbitMQ publication must be separately verified in runtime"},
-            {"step":4,"event":"worker.processed","detail":"Worker ledger record must be separately verified"},
-        ]
-        return trace, {"algorithm":"Message-oriented communication","delivery_guarantee":"at-least-once is possible; consumer must be idempotent",
-                       "execution_mode":"workflow_template","runtime_verified":False}
-    if lab_id == "stream":
-        trace = [
-            {"step":1,"event":"websocket.connected","sequence":1},
-            {"step":2,"event":"telemetry.frame","sequence":2},
-            {"step":3,"event":"telemetry.frame","sequence":3},
-            {"step":4,"event":"websocket.disconnected","sequence":4},
-            {"step":5,"event":"websocket.reconnected","sequence":5},
-        ]
-        return trace, {"algorithm":"Stream lifecycle","sequence_gap_detection":"demonstration trace only",
-                       "execution_mode":"simulation","runtime_verified":False}
+    if lab_id in {"messaging", "stream"}:
+        params = parameters or {}
+        scenario = str(params.get("scenario", "normal"))
+        allowed_scenarios = {"normal", "slow-consumer", "interruption", "delivery-retry"}
+        if scenario not in allowed_scenarios:
+            raise HTTPException(422, "unknown communication scenario")
+        try:
+            producer_rate = int(params.get("producer_rate", 8))
+            consumer_rate = int(params.get("consumer_rate", 5))
+            capacity = int(params.get("buffer_capacity", 20))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "producer_rate, consumer_rate and buffer_capacity must be integers")
+        if not 1 <= producer_rate <= 100 or not 1 <= consumer_rate <= 100 or not 1 <= capacity <= 1000:
+            raise HTTPException(422, "communication rates must be 1..100 and buffer capacity 1..1000")
+        workload = str(params.get("workload", "mixed"))
+        if workload not in {"incident", "telemetry", "mixed"}:
+            raise HTTPException(422, "unknown communication workload")
+        requested_mode = str(params.get("mode", "messaging" if lab_id == "messaging" else "stream"))
+        modes = ["messaging", "stream"] if requested_mode == "compare" else [requested_mode]
+        if any(mode not in {"messaging", "stream"} for mode in modes):
+            raise HTTPException(422, "mode must be compare, messaging or stream")
+        trace = []
+        state = {"incident_state":"CREATED", "dispatch_state":"WAITING", "inventory_state":"READY",
+                 "transport_state":"INITIALIZED", "pending_messages":0, "buffer_bytes":0,
+                 "buffer_capacity_bytes":capacity*1024, "message_status":"Not sent",
+                 "stream_status":"Not started", "messages_sent":0, "messages_delivered":0,
+                 "messages_acknowledged":0, "bytes_produced":0, "bytes_consumed":0,
+                 "consumer_lag_ms":0, "retry_count":0, "connection":"connected"}
+        def add_event(mode, event, detail, at, **fields):
+            trace.append({"step":len(trace)+1, "at_ms":at, "event":event, "detail":detail,
+                          "transport":mode, "state":dict(state), **fields})
+        for mode in modes:
+            prefix = "message" if mode == "messaging" else "stream"
+            state["transport_state"] = "MESSAGE_QUEUE" if mode == "messaging" else "BYTE_STREAM"
+            if workload in {"incident", "mixed"}:
+                state["incident_state"] = "PUBLISHED"
+                if mode == "messaging":
+                    state["messages_sent"] += 1
+                    state["pending_messages"] += 1
+                    state["message_status"] = "MSG-INC-104 queued"
+                    add_event(mode,"message.created","P1 created discrete DispatchRequest message MSG-INC-104 for incident INC-104",0,
+                              message_id="MSG-INC-104",sender="P1",receiver="P2",attempt=1)
+                    add_event(mode,"message.queued","Broker queue accepted the message; consumer processing has not yet been confirmed",25,
+                              message_id="MSG-INC-104",queue_depth=state["pending_messages"])
+                    if scenario == "slow-consumer":
+                        add_event(mode,"consumer.waiting","P2 consumer is deliberately slow; message remains pending",250,
+                                  message_id="MSG-INC-104",queue_depth=state["pending_messages"])
+                    if scenario == "delivery-retry":
+                        state["retry_count"] += 1
+                        add_event(mode,"message.delivery_failed","First simulated delivery attempt failed; no acknowledgement was received",300,
+                                  message_id="MSG-INC-104",attempt=1,error="simulated transient delivery failure")
+                        add_event(mode,"message.retry_scheduled","Retry scheduled with the same message ID; consumer must be idempotent",500,
+                                  message_id="MSG-INC-104",attempt=2)
+                    state["dispatch_state"] = "RECEIVED"
+                    state["messages_delivered"] += 1
+                    state["pending_messages"] = max(0,state["pending_messages"]-1)
+                    add_event(mode,"message.delivered","P2 received the complete discrete message envelope",650,
+                              message_id="MSG-INC-104",attempt=2 if scenario == "delivery-retry" else 1)
+                    state["dispatch_state"] = "ACKNOWLEDGED"
+                    state["messages_acknowledged"] += 1
+                    state["message_status"] = "MSG-INC-104 acknowledged"
+                    add_event(mode,"message.acknowledged","Consumer acknowledgement recorded separately from business processing",700,
+                              message_id="MSG-INC-104",ack_type="consumer-received")
+                    state["dispatch_state"] = "ASSIGNED"
+                    add_event(mode,"dispatch.processed","P2 validated INC-104 and assigned a response unit",760,
+                              message_id="MSG-INC-104",business_status="processed")
+                else:
+                    payload = 1536
+                    state["bytes_produced"] += payload
+                    state["buffer_bytes"] = min(state["buffer_capacity_bytes"],state["buffer_bytes"]+payload)
+                    state["stream_status"] = "INC-104 frame buffered"
+                    add_event(mode,"stream.bytes_produced","P1 encoded the incident command into an ordered byte stream; frame boundary is application-defined",0,
+                              sequence=1,byte_offset=0,byte_length=payload,frame="DispatchRequest INC-104")
+                    if scenario == "interruption":
+                        state["connection"] = "disconnected"
+                        add_event(mode,"stream.disconnected","Connection interrupted mid-transfer; receiver must not treat a partial frame as complete",180,
+                                  sequence=2,byte_offset=512,partial=True)
+                        state["connection"] = "reconnected"
+                        add_event(mode,"stream.reconnected","Connection re-established; simulation resumes from the tracked byte offset",420,
+                                  sequence=3,resume_offset=512)
+                    if scenario == "slow-consumer":
+                        state["consumer_lag_ms"] = 600
+                        add_event(mode,"stream.backpressure","Consumer falls behind producer; buffer occupancy and lag increase",500,
+                                  buffer_bytes=state["buffer_bytes"],consumer_lag_ms=state["consumer_lag_ms"])
+                    state["bytes_consumed"] += payload
+                    state["buffer_bytes"] = max(0,state["buffer_bytes"]-payload)
+                    state["stream_status"] = "INC-104 frame decoded"
+                    state["dispatch_state"] = "ASSIGNED"
+                    add_event(mode,"stream.frame_decoded","P2 reconstructed the complete application frame from ordered bytes and processed the dispatch command",850,
+                              sequence=4,byte_offset=0,byte_length=payload,frame="DispatchRequest INC-104")
+            if workload in {"telemetry", "mixed"}:
+                for seq, size, at in ((1,512,1000),(2,768,1200),(3,640,1400),(4,480,1600)):
+                    if mode == "messaging":
+                        state["messages_sent"] += 1
+                        state["pending_messages"] += 1
+                        msg_id = f"MSG-TEL-{seq:03d}"
+                        state["message_status"] = f"{msg_id} queued"
+                        add_event(mode,"message.created","P3 published a discrete resource-availability update",at,
+                                  message_id=msg_id,sender="P3",receiver="P2",payload_bytes=size,attempt=1)
+                        if scenario == "slow-consumer" and seq in (2,3):
+                            add_event(mode,"consumer.waiting","Telemetry message waits while consumer rate is constrained",at+50,
+                                      message_id=msg_id,queue_depth=state["pending_messages"])
+                        state["messages_delivered"] += 1
+                        state["messages_acknowledged"] += 1
+                        state["pending_messages"] = max(0,state["pending_messages"]-1)
+                        state["inventory_state"] = f"UPDATE-{seq}-ACK"
+                        add_event(mode,"message.acknowledged","Consumer accepted the individual telemetry message; payload boundaries remain intact",at+100,
+                                  message_id=msg_id,ack_type="consumer-received",attempt=1)
+                    else:
+                        state["bytes_produced"] += size
+                        state["buffer_bytes"] = min(state["buffer_capacity_bytes"],state["buffer_bytes"]+size)
+                        state["stream_status"] = f"sequence {seq} buffered"
+                        add_event(mode,"stream.chunk_received","P3 telemetry bytes appended to the ordered stream; chunk boundaries are not assumed to be application records",at,
+                                  sequence=seq,byte_offset=state["bytes_produced"]-size,byte_length=size)
+                        if scenario == "slow-consumer":
+                            state["consumer_lag_ms"] += 120
+                            add_event(mode,"stream.backpressure","Producer rate exceeds consumption; buffered bytes and lag rise",at+30,
+                                      sequence=seq,buffer_bytes=state["buffer_bytes"],consumer_lag_ms=state["consumer_lag_ms"])
+                        consumed = min(state["buffer_bytes"],size if scenario != "slow-consumer" else max(64,size//2))
+                        state["bytes_consumed"] += consumed
+                        state["buffer_bytes"] = max(0,state["buffer_bytes"]-consumed)
+                        state["inventory_state"] = f"SEQUENCE-{seq}-CONSUMED"
+                        add_event(mode,"stream.bytes_consumed","P2 consumed the next available byte range; decoder uses framing/length metadata to identify records",at+80,
+                                  sequence=seq,byte_length=consumed,buffer_bytes=state["buffer_bytes"],consumer_lag_ms=state["consumer_lag_ms"])
+        state["transport_state"] = "COMPLETED"
+        if scenario == "interruption" and "stream" in modes:
+            state["connection"] = "connected"
+        add_event("system","simulation.completed","Configured workload reached its deterministic end; counters summarize the generated simulation trace",max([e["at_ms"] for e in trace],default=0)+1)
+        return trace, {"algorithm":"Message-oriented vs stream-oriented communication","scenario":scenario,"workload":workload,
+                       "mode":requested_mode,"producer_rate":producer_rate,"consumer_rate":consumer_rate,
+                       "buffer_capacity_bytes":capacity*1024,"final_state":dict(state),
+                       "messages_sent":state["messages_sent"],"messages_delivered":state["messages_delivered"],
+                       "messages_acknowledged":state["messages_acknowledged"],"bytes_produced":state["bytes_produced"],
+                       "bytes_consumed":state["bytes_consumed"],"retry_count":state["retry_count"],
+                       "execution_mode":"simulation","simulation_detail":"deterministic","runtime_verified":False,
+                       "summary":"Simulation evidence only; broker and socket delivery are not verified against live infrastructure."}
     trace = [
         {"step":1,"event":"baseline.configured","replicas":1,"measurement":"not-run"},
         {"step":2,"event":"scaled.configured","replicas":3,"measurement":"not-run"},
