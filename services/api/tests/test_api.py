@@ -466,3 +466,47 @@ def test_bully_election_step_reset_replay():
     again = client.post(f"/api/experiments/{run_id}/step")
     assert again.status_code == 200
     assert again.json()["event"] == first.json()["event"]
+
+
+def test_heartbeat_suspicion_studio_emits_detector_evidence():
+    response = client.post("/api/experiments", json={
+        "lab_id":"beacon","scenario":"heartbeat-loss",
+        "parameters":{"scenario":"heartbeat-loss","node_id":"P2","interval_ms":1000,"timeout_ms":3000,"threshold":3000,"missed_beats":4,"recover":False}
+    })
+    assert response.status_code == 200
+    run = response.json()["run"]
+    assert run["result"]["algorithm"] == "Heartbeat suspicion model"
+    assert run["result"]["final_state"] == "unavailable"
+    assert any(event["event"] == "heartbeat.missed" for event in run["trace"])
+    assert any(event["event"] == "failure.suspected" for event in run["trace"])
+    assert any(event["event"] == "failure.timeout" for event in run["trace"])
+    assert all(node["state"] == "healthy" for key,node in run["result"]["final_nodes"].items() if key != "P2")
+
+
+def test_heartbeat_suspicion_scenarios_and_recovery_are_deterministic():
+    for scenario in ("normal-operation","delayed-heartbeat","heartbeat-loss","failure-recovery","intermittent-network"):
+        response = client.post("/api/experiments", json={
+            "lab_id":"beacon","scenario":scenario,
+            "parameters":{"scenario":scenario,"node_id":"P2","interval_ms":1000,
+                          "timeout_ms":3000,"threshold":3000,
+                          "missed_beats":0 if scenario == "normal-operation" else 4,
+                          "recover":scenario != "heartbeat-loss"}
+        })
+        assert response.status_code == 200
+        run = response.json()["run"]
+        assert run["trace"]
+        assert run["result"]["execution_mode"] == "simulation"
+        assert all("nodes" in event and "at_ms" in event for event in run["trace"])
+        if scenario in ("delayed-heartbeat","failure-recovery","intermittent-network","normal-operation"):
+            assert run["result"]["final_state"] == "healthy"
+
+
+def test_heartbeat_suspicion_rejects_invalid_configuration():
+    for parameters in (
+        {"scenario":"heartbeat-loss","interval_ms":50,"timeout_ms":1000},
+        {"scenario":"heartbeat-loss","interval_ms":1000,"timeout_ms":500},
+        {"scenario":"heartbeat-loss","interval_ms":1000,"timeout_ms":3000,"missed_beats":101},
+        {"scenario":"heartbeat-loss","interval_ms":1000,"timeout_ms":3000,"node_id":"P9"},
+    ):
+        response = client.post("/api/experiments",json={"lab_id":"beacon","parameters":parameters})
+        assert response.status_code == 422
