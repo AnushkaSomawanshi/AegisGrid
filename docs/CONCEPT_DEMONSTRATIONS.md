@@ -337,3 +337,19 @@ The dedicated page offers message-only, stream-only and comparison views; shared
 ### Validation and limitations
 
 The API validates workload, scenario, producer/consumer rates, and buffer capacity. Tests cover message retry and acknowledgement evidence, stream byte/buffer/reconnect evidence, and invalid configuration. The experiment remains explicitly marked as deterministic simulation; live broker/socket verification and real performance measurements are outside this demo.
+
+
+## Local Distributed Deployment Studio
+
+The Deployment Studio complements the protocol labs with a practical containerized deployment of the AegisGrid incident-response application. The existing Docker Compose stack separates the frontend, FastAPI API, RabbitMQ worker, transactional outbox dispatcher, PostgreSQL, and RabbitMQ. The local Kubernetes resources are maintained under `deploy/kubernetes/`.
+
+The UI includes:
+- A topology view of the services declared by the existing deployment.
+- Live API-side PostgreSQL query and RabbitMQ TCP reachability probes from `GET /api/deployment/status`.
+- A verification action that creates a uniquely labelled low-severity incident via `POST /api/deployment/verify-request`, exercising the real frontend-to-API-to-database path.
+- Docker Compose and Kubernetes command previews, including worker scaling.
+- Exportable evidence that distinguishes actual probes from unconnected runtime inventory and unapplied command previews.
+
+The deployment lab explicitly does not claim to know host Docker container or Kubernetes pod counts. Those values must be inspected using Docker/Kubernetes tooling until an explicit runtime adapter is configured. RabbitMQ TCP reachability is not proof of message publish/consume; the worker and dispatcher logs provide additional evidence.
+
+See [Local Distributed Deployment Guide](LOCAL_DISTRIBUTED_DEPLOYMENT.md) for startup, scaling, inspection, and cleanup instructions. Kubernetes manifests use local development credentials and are not a production security configuration.
