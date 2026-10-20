@@ -5,7 +5,8 @@ AegisGrid combines an emergency-response application with an educational distrib
 
 ## Initial service boundaries
 - **Frontend**: React/TypeScript command centre, algorithm labs and operations views.
-- **API**: FastAPI application API, educational algorithm endpoints, event ledger and WebSocket broadcast endpoint.
+- **API**: FastAPI application API, educational algorithm endpoints, event ledger, WebSocket broadcast endpoint and durable exchange/queue declaration.
+- **Event Worker**: independent RabbitMQ consumer. It consumes from the durable audit queue and writes idempotent delivery records and heartbeat/processed counts to PostgreSQL.
 - **PostgreSQL**: persisted incidents, experiment records and event ledger.
 - **RabbitMQ**: durable topic exchange used for application event publication.
 
@@ -15,8 +16,9 @@ Algorithm labs currently live as modules inside the API process. They are not al
 1. Client submits an incident to the API.
 2. API validates and persists it.
 3. API attempts publication through RabbitMQ.
-4. API records event metadata and broadcasts to connected WebSocket clients.
-5. Dashboard refreshes persisted state.
+4. Independent Event Worker consumes the message from `aegisgrid.audit`, persists delivery metadata idempotently, and updates its heartbeat/status row.
+5. API broadcasts updates to connected WebSocket clients and reads worker state for the operations dashboard.
+6. Dashboard refreshes persisted state.
 
 The initial database insert and broker publication do not use a transactional outbox. Add an outbox and independently running consumer before claiming exactly-once effects or robust event publication guarantees.
 
