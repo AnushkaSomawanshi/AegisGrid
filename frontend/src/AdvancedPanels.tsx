@@ -143,8 +143,8 @@ export function MessagingConsole(){
  </div>;
 }
 
-export function ExperimentWorkbench(){
- const [lab,setLab]=useState("physical-clock");
+export function ExperimentWorkbench({initialLab="physical-clock"}:{initialLab?:string}){
+ const [lab,setLab]=useState(initialLab);
  const [scenario,setScenario]=useState("baseline");
  const [offsets,setOffsets]=useState(sampleOffsets);
  const [misses,setMisses]=useState(3);
