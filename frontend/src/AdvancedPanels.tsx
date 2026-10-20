@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Clock3, Database, MapPin, Package, Play, Plus, Radio, RotateCcw, Save, ShieldCheck, StepForward, Workflow } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Clock3, Database, MapPin, Network, Package, Play, Plus, Radio, RotateCcw, Save, ShieldCheck, StepForward, Workflow } from "lucide-react";
 import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
 
 const API = (import.meta as ImportMeta & {env?: {VITE_API_URL?: string}}).env?.VITE_API_URL || "/api-proxy";
