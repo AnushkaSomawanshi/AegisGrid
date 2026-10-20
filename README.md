@@ -1,6 +1,6 @@
 # AegisGrid — Distributed Emergency Response & Resource Coordination
 
-AegisGrid is a distributed-systems mini-project that brings together an emergency-response command centre and an inspectable laboratory for distributed algorithms. It demonstrates a React dashboard, FastAPI service, PostgreSQL persistence, RabbitMQ messaging, an independent consumer worker, Docker Compose and Kubernetes workloads.
+AegisGrid is a distributed-systems mini-project that brings together an emergency-response command centre and an inspectable laboratory for distributed algorithms. It demonstrates a React dashboard, FastAPI service, PostgreSQL persistence, RabbitMQ messaging, a transactional outbox dispatcher, an idempotent consumer worker, Docker Compose and Kubernetes workloads.
 
 > **Important distinction:** Incident/event APIs, database persistence, broker publication attempts, and worker consumption are real when the services are running. Clock synchronization, Lamport/vector clocks, global snapshots, leader election, mutual exclusion and heartbeat examples are deterministic educational simulations. Dashboard performance curves are illustrative until replaced with measurements collected from a live experiment. This academic project is not a real emergency-response dispatch system.
 
