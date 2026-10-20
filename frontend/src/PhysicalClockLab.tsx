@@ -43,9 +43,6 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   const accepted = nodes.filter(n => n.available);
   const estimate = accepted.length ? Math.round(accepted.reduce((sum, n) => sum + n.offset, 0) / accepted.length) : 0;
   const readings = nodes.map(n => ({ ...n, target: estimate, requested: Math.max(-maxCorrection, Math.min(maxCorrection, estimate - n.offset)), corrected: stage === "apply" || stage === "verify" ? n.offset + Math.max(-maxCorrection, Math.min(maxCorrection, estimate - n.offset)) : null }));
-  const validOffsets = readings.filter(n => n.available);
-  const finalOffsets = validOffsets.map(n => n.corrected ?? n.offset);
-  const maxDisagreement = finalOffsets.length ? Math.max(...finalOffsets) - Math.min(...finalOffsets) : 0;
   const selected = readings.find(n => n.id === selectedNode) || readings[0];
   const activeEvent = trace.find(e => e.id === selectedEvent) || trace[trace.length - 1];
   const completed = stage === "verify";
@@ -73,11 +70,11 @@ export function PhysicalClockLab({ onBack }: { onBack: () => void }) {
   }
   function configurePreset(value: Preset) { reset(value); }
   function start() {
-    setTrace([]); setStage("collect"); setRunId(v => v + 1);
-    setNotice("Run started. The coordinator is collecting synthetic node readings.");
-    addEvent({ stage: "collect", title: "Synchronization round opened", detail: "Coordinator created a new round and will poll each available node.", kind: "system", payload: { run: runId + 1, participant_count: accepted.length, delay_model_ms: delayModel } });
-    nodes.forEach(n => addEvent({ stage: "collect", title: n.available ? "Clock reading received" : "Node timed out", detail: n.available ? n.label + " reported offset " + ms(n.offset) + "; configured one-way delay " + n.delay + " ms." : n.label + " did not respond and is excluded from this round.", node: n.id, kind: n.available ? "message" : "warning", payload: { node_id: n.id, reported_offset_ms: n.offset, configured_delay_ms: n.delay, accepted: n.available } }));
-    setStage("collect");
+    const nextRun = runId + 1;
+    const events: Omit<TraceEvent, "id">[] = [{ stage: "collect", title: "Synchronization round opened", detail: "Coordinator created a new round and will poll each available node.", kind: "system", payload: { run: nextRun, participant_count: accepted.length, delay_model_ms: delayModel } }, ...nodes.map(n => ({ stage: "collect" as Stage, title: n.available ? "Clock reading received" : "Node timed out", detail: n.available ? n.label + " reported offset " + ms(n.offset) + "; configured node delay " + n.delay + " ms." : n.label + " did not respond and is excluded from this round.", node: n.id, kind: (n.available ? "message" : "warning") as TraceEvent["kind"], payload: { node_id: n.id, reported_offset_ms: n.offset, configured_delay_ms: n.delay, configured_delay_model_ms: delayModel, accepted: n.available } }))];
+    const fullTrace = events.map((event, i) => ({ ...event, id: i + 1 }));
+    setTrace(fullTrace); setSelectedEvent(fullTrace[fullTrace.length - 1]?.id ?? null); setStage("collect"); setRunId(nextRun);
+    setNotice("Run started. The coordinator collected synthetic node readings.");
   }
   function advance() {
     if (stage === "ready") { start(); return; }
