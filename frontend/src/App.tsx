@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter, StreamMonitor } from "./AdvancedPanels";
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
+import { CommandCenter } from "./CommandCenter";
+import "./command-center.css";
 import { VectorClockDemo } from "./VectorClockDemo";
 import { LeaderElectionDemo } from "./LeaderElectionDemo";
 import { DeploymentStudio } from "./DeploymentStudio";
@@ -27,9 +29,9 @@ type Overview = {metrics:{active_incidents:number;critical_incidents:number;tota
 type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 
 const nav = [
-  {label:"OVERVIEW",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & units",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow},{id:"messaging",name:"Outbox & worker",icon:MessageSquare},{id:"stream",name:"Telemetry stream",icon:Radio}]},
-  {label:"DISTRIBUTED SYSTEMS",items:[{id:"labs",name:"Concept laboratory",icon:Workflow},{id:"experiments",name:"Experiment workbench",icon:Play},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"election-demo",name:"Leader election studio",icon:Network},{id:"architecture",name:"Service topology",icon:Network},{id:"scale",name:"Scale & resilience",icon:Layers3}]},
-  {label:"OPERATIONS",items:[{id:"deployment",name:"Deployment Studio",icon:Boxes},{id:"runtime",name:"Runtime diagnostics",icon:Terminal},{id:"docs",name:"Project guide",icon:BookOpen}]}
+  {label:"OPERATIONS",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & dispatch",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow}]},
+  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"messaging",name:"Message delivery",icon:MessageSquare},{id:"stream",name:"Telemetry streams",icon:Radio},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"election-demo",name:"Leader election studio",icon:Network},{id:"scale",name:"Scaling & resilience",icon:Layers3},{id:"labs",name:"Protocol execution studios",icon:Play}]},
+  {label:"INFRASTRUCTURE",items:[{id:"deployment",name:"Docker & Kubernetes",icon:Boxes},{id:"runtime",name:"Runtime diagnostics",icon:Terminal}]}
 ];
 
 const labList = [
@@ -134,7 +136,7 @@ function App(){
  const visibleEvents=events.filter(e=>(eventFilter==="all"||e.event_type.includes(eventFilter))&&`${e.event_type} ${e.source}`.toLowerCase().includes(search.toLowerCase()));
  const services=overview?.services||[];
  const activeLab=labList.find(l=>l.id===selectedLab)||labList[0];
- function navigate(id:string){setPage(id);setSidebarOpen(false);setNotice("");}
+ function navigate(id:string){if(id==="docs"||id==="experiments"){setPage("command");}else{setPage(id);}setSidebarOpen(false);setNotice("");}
  const headerTitle=nav.flatMap(s=>s.items).find(i=>i.id===page)?.name||"Command centre";
 
  return <div className="app-shell">
@@ -151,7 +153,7 @@ function App(){
    <header className="topbar"><div className="topbar-left"><button className="icon-btn mobile-only" onClick={()=>setSidebarOpen(true)} aria-label="Open menu"><Menu size={20}/></button><div className="breadcrumbs"><span>AEGISGRID</span><ChevronRight size={14}/><b>{headerTitle.toUpperCase()}</b></div></div><div className="topbar-actions"><div className="date-display"><Clock3 size={14}/>{fmtDate()}</div><button className="icon-btn search-shortcut" onClick={()=>document.getElementById("global-search")?.focus()} aria-label="Search"><Search size={17}/></button><button className="icon-btn notification-btn" onClick={()=>setNotice("You’re all caught up. Notifications are local to this demonstration.")} aria-label="Notifications"><Bell size={17}/><i></i></button><div className="topbar-divider"></div><div className="avatar avatar-small">AG</div></div></header>
    <div className="page-content">
     {notice&&<div className="notice"><CheckCircle2 size={16}/><span>{notice}</span><button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={15}/></button></div>}
-    {page==="command"&&<CommandPage overview={overview} incidents={activeIncidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
+    {page==="command"&&<CommandCenter overview={overview} incidents={incidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
     {page==="resources"&&<ResourceCenter/>}\n    {page==="messaging"&&<MessagingConsole/>}\n    {page==="stream"&&<StreamMonitor/>}\n    {page==="experiments"&&<ExperimentWorkbench/>}
     {page==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("experiments")}/>}
     {page==="vector-demo"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
