@@ -401,3 +401,20 @@ def test_vector_clock_rejects_unknown_and_wrong_recipient_messages():
         {'process':'P3','kind':'receive','message_id':'M1','event_id':'E2'}
     ]}})
     assert wrong.status_code == 422
+
+
+def test_vector_clock_preset_scenarios_are_distinct():
+    def run_for(scenario):
+        response = client.post('/api/experiments', json={'lab_id':'vector','scenario':scenario})
+        assert response.status_code == 201
+        return response.json()['run']
+    independent = run_for('independent')
+    assert len(independent['trace']) == 3
+    assert independent['result']['messages'] == []
+    multi_hop = run_for('multi-hop')
+    assert len(multi_hop['trace']) == 5
+    assert multi_hop['trace'][-1]['vector_after'] == [2,2,1]
+    concurrent = run_for('concurrent')
+    assert len(concurrent['trace']) == 5
+    assert any(c['relation'] == 'concurrent' and {c['a'], c['b']} == {'E4','E5'}
+               for c in concurrent['result']['event_comparisons'])
