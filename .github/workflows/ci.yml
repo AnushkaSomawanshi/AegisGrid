@@ -27,3 +27,35 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build API image
+        run: docker build -t aegisgrid-api:test ./services/api
+      - name: Build Event Worker image
+        run: docker build -t aegisgrid-worker:test ./services/worker
+      - name: Build frontend image
+        run: docker build -t aegisgrid-frontend:test ./frontend
+  kubernetes-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Validate Kubernetes YAML documents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in Path("infrastructure/kubernetes").glob("*.yaml"):
+              docs = [doc for doc in yaml.safe_load_all(path.read_text()) if doc]
+              assert docs, f"{path} contains no Kubernetes objects"
+              for item in docs:
+                  assert "apiVersion" in item and "kind" in item and "metadata" in item, (path, item)
+              print(f"{path}: {len(docs)} valid object(s)")
+          PY
