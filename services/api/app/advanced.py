@@ -265,8 +265,13 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                        "note":"This trace serializes critical-section ownership; it is not a lock on an external production resource.",
                        "execution_mode":"simulation"}
     if lab_id == "beacon":
-        misses = int(parameters.get("missed_beats", 3))
-        threshold = int(parameters.get("threshold", 3))
+        try:
+            misses = int(parameters.get("missed_beats", 3))
+            threshold = int(parameters.get("threshold", 3))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "missed_beats and threshold must be integers")
+        if misses < 0 or misses > 100 or threshold < 1 or threshold > 100:
+            raise HTTPException(422, "missed_beats must be 0..100 and threshold must be 1..100")
         trace = [{"step":i+1,"event":"heartbeat.missed","node":"node-2","miss_count":i+1,
                   "state":"suspected" if i+1 < threshold else "unavailable"}
                  for i in range(min(misses, 100))]
