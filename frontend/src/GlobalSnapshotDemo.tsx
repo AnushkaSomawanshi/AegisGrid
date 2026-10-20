@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Activity, CheckCircle2, CircleDot, Download, Pause, Play, RotateCcw, ShieldCheck, StepForward, Workflow } from "lucide-react";
 import "./snapshot.css";
 
@@ -15,7 +15,7 @@ const presets=[
 const names:Record<string,string>={P1:"Incident & Dispatch",P2:"Resource Coordination",P3:"Inventory & Monitoring"};
 export function GlobalSnapshotDemo({onBack}:{onBack:()=>void}){
  const [preset,setPreset]=useState("in-transit"),[run,setRun]=useState<Run|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState(""),[selected,setSelected]=useState(0);
- const trace=run?.trace||[],executed=trace.slice(0,run?.current_step||0),active=executed[executed.length-1];
+ const trace=run?.trace||[],executed=trace.slice(0,run?.current_step||0);
  const result=run?.result||{};
  const processes=(result.processes as string[]|undefined)||["P1","P2","P3"];
  const states:Record<string,any>={};
@@ -23,7 +23,7 @@ export function GlobalSnapshotDemo({onBack}:{onBack:()=>void}){
  const channels:Record<string,any>[]=((result.channel_states as Record<string,any>[]|undefined)||[]).map(c=>({...c,status:"not-recording",messages:[],started_at_step:null,closed_at_step:null}));
  executed.forEach(e=>{if(e.event==="channel.recording.started"){const c=channels.find(x=>x.channel===e.channel);if(c){c.status="recording";c.started_at_step=e.step;}}if(e.event==="channel.message_recorded"){const c=channels.find(x=>x.channel===e.channel);if(c)c.messages.push({message_id:e.message_id,payload:e.message,delivery_step:e.step});}if(e.event==="channel.recording.closed"){const c=channels.find(x=>x.channel===e.channel);if(c){c.status="closed";c.closed_at_step=e.step;}}});
  const completed=run?.status==="completed";
- const visibleEvents=useMemo(()=>trace.slice(0,Math.max(run?.current_step||0,1)),[trace,run?.current_step]);
+
  async function create(){setBusy(true);setError("");setNotice("");try{const selectedPreset=presets.find(p=>p.id===preset)!;const out=await api<{run:Run}>("/experiments",{method:"POST",body:JSON.stringify({lab_id:"snapshot",scenario:selectedPreset.id,parameters:selectedPreset.parameters})});setRun(out.run);setSelected(0);setNotice("Snapshot scenario created and persisted. Advance the event cursor to execute it.");}catch(e){setError(e instanceof Error?e.message:"Could not create snapshot run");}finally{setBusy(false);}}
  async function step(){if(!run||completed)return;setBusy(true);setError("");try{const out=await api<{run:Run;event:Event|null}>("/experiments/"+run.id+"/step",{method:"POST"});setRun(out.run);setSelected(Math.max(0,out.run.current_step-1));setNotice(out.event?"Executed "+out.event.event+" · step "+out.event.step:"Trace complete.");}catch(e){setError(e instanceof Error?e.message:"Could not advance trace");}finally{setBusy(false);}}
  async function control(action:"pause"|"resume"|"reset"){if(!run)return;setBusy(true);setError("");try{const out=await api<{run:Run}>("/experiments/"+run.id+"/"+action,{method:"POST"});setRun(out.run);if(action==="reset")setSelected(0);setNotice(action==="reset"?"Cursor reset; recorded run and trace are preserved.":"Run "+action+"d.");}catch(e){setError(e instanceof Error?e.message:"Run control failed");}finally{setBusy(false);}}
