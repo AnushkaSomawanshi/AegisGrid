@@ -152,3 +152,32 @@ def test_telemetry_websocket_emits_sequenced_synthetic_frames():
         assert first["sequence"] == 0
         assert second["sequence"] == 1
         assert first["type"] == "telemetry"
+
+
+def test_protocol_models_compute_results_from_parameters():
+    lamport = client.post("/api/experiments", json={
+        "lab_id": "lamport", "scenario": "receive-rule",
+        "parameters": {"operations": [
+            {"process":"P1","kind":"send","message_id":"m"},
+            {"process":"P2","kind":"receive","message_id":"m","message_clock":1}
+        ]}
+    }).json()["run"]
+    assert lamport["trace"][1]["clock_after"] == 2
+    assert lamport["result"]["final_process_clocks"]["P2"] == 2
+
+    election = client.post("/api/experiments", json={
+        "lab_id": "election", "scenario": "coordinator-failure",
+        "parameters": {"node_ids":[1,2,3,4,5],"failed_node":4}
+    }).json()["run"]
+    assert election["result"]["elected_coordinator"] == 5
+    assert any(event.get("kind") == "COORDINATOR" and event.get("node") == 5 for event in election["trace"])
+
+    mutex = client.post("/api/experiments", json={
+        "lab_id": "mutex", "scenario": "tie-break",
+        "parameters": {"requests":[
+            {"process":"P2","timestamp":1,"process_id":2},
+            {"process":"P1","timestamp":1,"process_id":1}
+        ]}
+    }).json()["run"]
+    assert mutex["result"]["grant_order"] == ["P1", "P2"]
+    assert mutex["result"]["max_simultaneous_owners"] == 1
