@@ -41,6 +41,61 @@ class ExperimentCreate(BaseModel):
     scenario: str = Field(default="default", max_length=120)
     parameters: dict[str, Any] = Field(default_factory=dict)
 
+
+class FaultInjection(BaseModel):
+    fault_type: str = Field(default="process-unavailable", pattern=r"^(process-unavailable|message-delay|heartbeat-loss)$")
+    target: str = Field(default="node-2", min_length=1, max_length=80)
+
+@router.post("/experiments/{run_id}/pause")
+def pause_experiment(run_id: int, db: Session = Depends(get_db)):
+    row = db.get(ExperimentRun, run_id)
+    if row is None:
+        raise HTTPException(404, "experiment run not found")
+    if row.status == "completed":
+        raise HTTPException(409, "completed run cannot be paused")
+    row.status = "paused"
+    row.updated_at = now()
+    db.commit()
+    db.refresh(row)
+    return {"run":experiment_dict(row)}
+
+@router.post("/experiments/{run_id}/resume")
+def resume_experiment(run_id: int, db: Session = Depends(get_db)):
+    row = db.get(ExperimentRun, run_id)
+    if row is None:
+        raise HTTPException(404, "experiment run not found")
+    if row.status == "completed":
+        raise HTTPException(409, "completed run cannot be resumed")
+    row.status = "running" if row.current_step > 0 else "ready"
+    row.updated_at = now()
+    db.commit()
+    db.refresh(row)
+    return {"run":experiment_dict(row)}
+
+@router.post("/experiments/{run_id}/inject-failure")
+def inject_experiment_failure(run_id: int, body: FaultInjection, db: Session = Depends(get_db)):
+    row = db.get(ExperimentRun, run_id)
+    if row is None:
+        raise HTTPException(404, "experiment run not found")
+    if row.status == "completed":
+        raise HTTPException(409, "completed run cannot accept another injected event; reset it first")
+    trace = json.loads(row.trace)
+    event = {"step":row.current_step + 1,"event":"fault.injected","fault_type":body.fault_type,
+             "target":body.target,"execution_mode":"simulation",
+             "note":"Injected into the educational trace; no real process or infrastructure was stopped."}
+    trace.insert(row.current_step, event)
+    for index, item in enumerate(trace):
+        item["step"] = index + 1
+    row.trace = json.dumps(trace)
+    result = json.loads(row.result)
+    result["injected_fault"] = {"fault_type":body.fault_type,"target":body.target,"execution_mode":"simulation"}
+    row.result = json.dumps(result)
+    row.status = "running"
+    row.updated_at = now()
+    db.commit()
+    db.refresh(row)
+    return {"run":experiment_dict(row),"event":event}
+
 class BeaconRequest(BaseModel):
     node_id: str = Field(default="node-2", min_length=1, max_length=80)
     interval_ms: int = Field(default=1000, ge=100, le=60000)
@@ -258,6 +313,8 @@ def step_experiment(run_id: int, db: Session = Depends(get_db)):
     row = db.get(ExperimentRun, run_id)
     if row is None:
         raise HTTPException(404, "experiment run not found")
+    if row.status == "paused":
+        raise HTTPException(409, "run is paused; resume it before stepping")
     trace = json.loads(row.trace)
     if row.current_step >= len(trace):
         row.status = "completed"
