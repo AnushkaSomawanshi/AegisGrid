@@ -43,6 +43,31 @@ def main() -> int:
     if not hpa or hpa.get("spec", {}).get("scaleTargetRef", {}).get("name") != "aegisgrid-api":
         errors.append("Optional HPA must target aegisgrid-api")
 
+    # Also validate the dedicated laptop-local Kustomize deployment set.
+    deploy_root = ROOT / "deploy/kubernetes"
+    try:
+        kustomization = load_documents(deploy_root / "kustomization.yaml")[0]
+        declared = kustomization.get("resources", [])
+        for resource in declared:
+            if not (deploy_root / resource).is_file():
+                errors.append(f"Kustomize resource missing: deploy/kubernetes/{resource}")
+        local_docs = []
+        for resource in declared:
+            resource_path = deploy_root / resource
+            if resource_path.is_file():
+                local_docs.extend(load_documents(resource_path))
+        local_kinds = {doc.get("kind") for doc in local_docs}
+        if not {"Namespace", "ConfigMap", "StatefulSet", "Deployment", "Service"}.issubset(local_kinds):
+            errors.append("Local Kustomize set must include Namespace, ConfigMap, StatefulSet, Deployment and Service")
+        local_deployments = {doc.get("metadata", {}).get("name") for doc in local_docs if doc.get("kind") == "Deployment"}
+        local_expected = {"aegisgrid-api", "aegisgrid-frontend", "aegisgrid-worker", "aegisgrid-outbox-dispatcher", "rabbitmq"}
+        if not local_expected.issubset(local_deployments):
+            errors.append("Local Kustomize set is missing Deployments: " + ", ".join(sorted(local_expected - local_deployments)))
+        if "postgres" not in {doc.get("metadata", {}).get("name") for doc in local_docs if doc.get("kind") == "StatefulSet"}:
+            errors.append("Local Kustomize set must include the PostgreSQL StatefulSet")
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        errors.append(f"Local Kustomize manifest validation failed: {exc}")
+
     if errors:
         print("\n".join("ERROR: " + error for error in errors), file=sys.stderr)
         return 1
