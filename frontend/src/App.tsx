@@ -21,8 +21,8 @@ type Overview = {metrics:{active_incidents:number;critical_incidents:number;tota
 type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 
 const nav = [
-  {label:"OVERVIEW",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"events",name:"Event ledger",icon:GitBranch}]},
-  {label:"DISTRIBUTED SYSTEMS",items:[{id:"labs",name:"Concept laboratory",icon:Workflow},{id:"architecture",name:"Service topology",icon:Network},{id:"scale",name:"Scale & resilience",icon:Layers3}]},
+  {label:"OVERVIEW",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & units",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch}]},
+  {label:"DISTRIBUTED SYSTEMS",items:[{id:"labs",name:"Concept laboratory",icon:Workflow},{id:"experiments",name:"Experiment workbench",icon:Play},{id:"architecture",name:"Service topology",icon:Network},{id:"scale",name:"Scale & resilience",icon:Layers3}]},
   {label:"OPERATIONS",items:[{id:"runtime",name:"Runtime diagnostics",icon:Terminal},{id:"docs",name:"Project guide",icon:BookOpen}]}
 ];
 
@@ -146,7 +146,7 @@ function App(){
    <div className="page-content">
     {notice&&<div className="notice"><CheckCircle2 size={16}/><span>{notice}</span><button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={15}/></button></div>}
     {page==="command"&&<CommandPage overview={overview} incidents={activeIncidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
-    {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
+    {page==="resources"&&<ResourceCenter/>}\n    {page==="experiments"&&<ExperimentWorkbench/>}\n    {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
     {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
     {page==="labs"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
