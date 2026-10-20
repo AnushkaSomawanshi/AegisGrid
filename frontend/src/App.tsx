@@ -151,6 +151,7 @@ function App(){
     {page==="messaging"&&<MessagingConsole/>}
     {page==="stream"&&<StreamMonitor/>}
     {page==="experiments"&&<ExperimentWorkbench/>}
+    {page==="labs"&&(selectedLab==="mutex"||selectedLab==="failure")&&<ExperimentWorkbench key={selectedLab} initialLab={selectedLab==="failure"?"beacon":"mutex"}/>}
     {page==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("experiments")}/>}
     {page==="vector-demo"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
     {page==="election-demo"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
@@ -161,7 +162,7 @@ function App(){
     {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
     {page==="labs"&&selectedLab==="messaging"&&<CommunicationDemo onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab==="stream"&&<CommunicationDemo onBack={()=>navigate("experiments")}/>}
-    {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
+    {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&selectedLab!=="mutex"&&selectedLab!=="failure"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
     {page==="scale"&&<ScalePage apiState={apiState} onNavigate={navigate}/>}
     {page==="deployment"&&<DeploymentStudio onBack={()=>navigate("command")}/>}
