@@ -305,6 +305,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
         }
     if lab_id == "vector":
         scenario = str(parameters.get("scenario", "basic-causality"))
+        custom_operations = "operations" in parameters
         operations = parameters.get("operations")
         if operations is None:
             operations = [
@@ -317,13 +318,13 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 {"process":"P3","kind":"receive","label":"Receive inventory update","message_id":"M2","from":"P2","event_id":"E7"},
                 {"process":"P1","kind":"local","label":"Independent dispatch update","event_id":"E8"}
             ]
-        if scenario == "independent" and "operations" not in parameters:
+        if not custom_operations and scenario == "independent":
             operations = [
                 {"process":"P1","kind":"local","label":"Dispatch board refresh","event_id":"E1"},
                 {"process":"P2","kind":"local","label":"Resource cache refresh","event_id":"E2"},
                 {"process":"P3","kind":"local","label":"Inventory audit","event_id":"E3"}
             ]
-        elif scenario == "multi-hop" and "operations" not in parameters:
+        elif not custom_operations and scenario == "multi-hop":
             operations = [
                 {"process":"P1","kind":"local","label":"Create incident","event_id":"E1"},
                 {"process":"P1","kind":"send","label":"Send dispatch to P2","message_id":"M1","to":"P2","event_id":"E2"},
@@ -331,7 +332,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 {"process":"P2","kind":"send","label":"Forward update to P3","message_id":"M2","to":"P3","event_id":"E4"},
                 {"process":"P3","kind":"receive","label":"Receive forwarded update","message_id":"M2","from":"P2","event_id":"E5"}
             ]
-        elif scenario == "concurrent" and "operations" not in parameters:
+        elif not custom_operations and scenario == "concurrent":
             operations = [
                 {"process":"P1","kind":"local","label":"Create dispatch update","event_id":"E1"},
                 {"process":"P1","kind":"send","label":"Send P1 update to P2","message_id":"M1","to":"P2","event_id":"E2"},
