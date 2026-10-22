@@ -219,13 +219,15 @@ Run the checks in the target environment before describing them as passing. This
 
 ## Engineering limitations and next steps
 
-The current academic baseline keeps service boundaries understandable and avoids claiming production-grade delivery guarantees. Important next improvements:
-- Transactional outbox to coordinate database changes with broker publication.
-- Idempotent consumer and retry limits/dead-letter queue.
-- Database migration tooling, event schema versioning and structured JSON payload columns.
-- Authentication/authorization for incident operations.
-- Metrics, structured logs, tracing and repeatable load-test harness.
-- Secure secret management, TLS, NetworkPolicies and appropriate persistent/HA designs for PostgreSQL/RabbitMQ.
+The current academic baseline includes an event/outbox recording path, an outbox dispatcher, event-ID deduplication in the worker, backend tests, CI, manifest validation and a Docker Compose smoke test. These mechanisms improve observability and recovery but do **not** provide end-to-end exactly-once delivery or production-grade availability.
+
+Remaining improvements include:
+- Verify publisher confirms and define bounded retry/dead-letter behavior for poison messages.
+- Add database migration tooling, versioned event schemas and consider structured JSON/JSONB payload columns.
+- Add authentication/authorization and rate limiting for incident/resource operations.
+- Extend structured logs, metrics, trace/correlation IDs and repeatable load tests across API, outbox, broker and worker.
+- Use secure secret management, TLS, NetworkPolicies, least-privilege service accounts and appropriate persistent/high-availability designs for PostgreSQL/RabbitMQ.
+- Validate Kubernetes deployment, recovery and scaling in a real development cluster; do not infer runtime success from static manifests.
 
 ## Academic and safety note
 
@@ -233,7 +235,7 @@ AegisGrid is a software engineering demonstration. Do not use it for real emerge
 
 ## Detailed implementation and demonstration
 
-The current implementation branch adds persisted resource inventory/reservations and a stepwise experiment workbench. See:
+The current repository includes persisted resource inventory/reservations and a stepwise experiment workbench. The following guides define how to inspect and verify these capabilities:
 - [Project Analysis Gap Audit](docs/PROJECT_ANALYSIS_GAP_AUDIT.md) — requirement-by-requirement gap analysis and acceptance gate.
 - [Docker & Kubernetes Demonstration Runbook](docs/DOCKER_KUBERNETES_DEMONSTRATION.md) — full run sequence for Compose, incident/resource workflow, RabbitMQ worker, Kubernetes rollout/scaling, Pod recovery, and evidence capture.
 - [Scalability and Resilience Experiments](docs/EXPERIMENTS.md) — controlled experiments and measurement requirements.
