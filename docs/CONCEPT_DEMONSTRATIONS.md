@@ -388,3 +388,42 @@ The mutual-exclusion and heartbeat labs use a dedicated full-width workspace rat
 6. Run a delayed heartbeat scenario where delivery crosses the timeout; suspicion is recorded before the late receipt clears it.
 7. Reset a persisted run and verify the next event repeats exactly.
 8. Treat CI and local builds as the source of test status; UI status badges alone are not execution evidence.
+
+
+## Critical Resource Control Room — mutual exclusion page redesign
+
+The Mutual Exclusion navigation item now opens a resource-centric execution workspace instead of the generic experiment workbench. The underlying `/api/experiments` and `/api/experiments/{run_id}/step` APIs remain authoritative for generated trace data and persisted run state.
+
+### Page structure
+
+1. **Resource identity and boundary:** identifies the teaching fixture as Recovery Slot R-01, capacity one, linked to example incident INC-1042. The page explicitly states that this is simulation data and does not lock or mutate a live dispatch resource.
+2. **Scenario selector:** competing resource claims, equal timestamps/tie-break, deferred permission, and delayed delivery. The selected scenario is passed in experiment parameters so the backend creates the corresponding trace preset.
+3. **Execution controls:** create a persisted run, advance one event, run the remaining trace, reset the cursor, and export a JSON evidence bundle.
+4. **Process topology:** three named logical participants, resource ownership indicator, and a note that the backend event ledger—not decorative arrows—is authoritative for message direction and order. The tie-break preset models two processes as defined by the backend.
+5. **Safety evidence:** displays relevant boolean/numeric/string result fields and the full backend result JSON. Missing checks are not represented as passing.
+6. **Message timeline and inspector:** future events remain visibly pending and cannot be selected as executed. Selecting an executed event shows exact recorded fields, including timestamps, sender/target, message type, request ordering key, process snapshots and application state when present.
+7. **Protected-operation walkthrough:** explains sample incident acknowledgement, unit assignment and reservation as modeled operations, without claiming they are live application mutations.
+8. **Correctness boundary:** explains that Ricart–Agrawala assumptions do not provide arbitrary crash/partition tolerance and recommends database-enforced atomic claims or consensus-backed leases with fencing for production ownership.
+
+### Data and execution contract
+
+- The UI creates a `mutex` experiment and passes `scenario` inside `parameters`, matching the backend mutex trace builder.
+- Step controls consume the returned persisted run and use `current_step` to distinguish executed events from pending events.
+- The owner badge is reconstructed from executed critical-section entry/exit and resource-owner events, rather than from the future final result.
+- JSON export contains run configuration, backend result, run metadata, and the trace prefix that has actually executed.
+- API errors are surfaced to the user; failed requests are not presented as successful runs.
+- The interface includes responsive layouts for tablet/mobile widths.
+
+### Manual validation checklist
+
+1. Open Distributed Runtime → Mutual exclusion and confirm the Critical Resource Control Room page is shown.
+2. Create the competing-claims run and verify a persisted run ID and pending event list appear.
+3. Advance one event at a time; confirm the executed cursor and inspector update while later events remain pending.
+4. Run to completion; compare final result checks against trace entry/reply/exit events.
+5. Choose equal timestamps and verify the backend trace records the process-ID tie-break.
+6. Choose deferred permission and inspect `reply.deferred`, blocked request, later deferred reply delivery and entry ordering.
+7. Reset and verify the cursor returns to the beginning; create a new run if the API rejects reset for that run state.
+8. Export JSON and confirm it contains only the executed trace prefix plus complete run/result metadata.
+9. Run `npm run build` in `frontend` and the backend test suite in the documented environment before merging.
+
+**Validation status:** this change was authored through the GitHub repository API. A local frontend build and backend test execution were not available in this authoring session; CI and reviewer verification are still required.
