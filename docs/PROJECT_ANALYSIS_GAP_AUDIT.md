@@ -163,3 +163,95 @@ The following items have since been added on branch `feature/aegisgrid-complete-
 - Real HTTP load probe script, optional API HPA manifest, and detailed Docker/Kubernetes runbook.
 
 This is meaningful progress but **does not close the whole acceptance checklist**. Remaining major work includes full algorithm state machines/invariants, bounded retry/backoff and a poison-message dead-letter policy, causal IDs/graph, real telemetry stream, live Docker/Kubernetes runtime adapter, measured end-to-end load/fault tests, and running the stack/cluster in an actual development environment. Current map markers are seeded example coordinates and do not represent live GPS.
+
+
+---
+
+## Repository audit and deployment acceptance baseline — 2026-10-22
+
+This section supersedes older point-in-time status statements where they conflict with the current repository. It records the scope of the audit and defines the evidence required before AegisGrid is described as fully validated.
+
+### Project requirement
+
+The assignment is to design, develop and deploy a small distributed application using Docker, Kubernetes or an equivalent container/orchestration platform. The implementation must demonstrate inter-service communication and a credible scalability experiment. A polished interface or a structurally valid manifest alone does not satisfy the deployment requirement.
+
+### Current repository evidence inspected
+
+The following files were inspected on `main` during this audit:
+
+- `docker-compose.yml`, `frontend/Dockerfile`, `frontend/nginx.conf`, `services/api/Dockerfile`, `services/api/requirements.txt`.
+- `infrastructure/kubernetes/namespace.yaml`, `infrastructure/kubernetes/app-stack.yaml`, `infrastructure/kubernetes/api-hpa.yaml`.
+- `deploy/kubernetes/kustomization.yaml` and the manifest validator's referenced local-cluster resources.
+- `.github/workflows/ci.yml`, `scripts/validate_manifests.py`, `scripts/k8s_recovery_probe.py`, and `services/api/tests/test_api.py`.
+- `README.md`, `docs/DOCKER_GUIDE.md`, `docs/KUBERNETES_GUIDE.md`, `docs/DOCKER_KUBERNETES_DEMONSTRATION.md`, `docs/EXPERIMENTS.md`, and this gap audit.
+
+The Compose file declares six services: frontend, API, worker, outbox dispatcher, PostgreSQL and RabbitMQ. It defines a named database volume and health checks for API/database/broker. The API code includes database-backed event recording and an outbox envelope, and attempts broker publication. These are source-level findings; they do not by themselves prove successful runtime delivery or worker processing.
+
+The main Kubernetes profile under `infrastructure/kubernetes/` defines application Deployments/Services, a PostgreSQL PVC, development placeholder Secret values, and an optional API HPA. The repository also maintains a separate laptop-local Kustomize profile under `deploy/kubernetes/`. These are two deployment profiles, not a single manifest set. Their configuration and documentation must be kept in sync, and the chosen profile must be named explicitly in demonstration evidence. The local profile's development credentials are not suitable for shared or production use.
+
+### Architecture diagram
+
+```mermaid
+flowchart TD
+    U[Browser / User] --> FE[React frontend + Nginx]
+    FE -->|HTTP / API proxy| API[FastAPI API]
+    API -->|SQL transaction| DB[(PostgreSQL)]
+    API -->|publish attempt| MQ[RabbitMQ]
+    DB --> OB[Transactional outbox]
+    OB --> OD[Outbox dispatcher]
+    OD -->|AMQP publish / retry| MQ
+    MQ -->|delivery| W[Worker consumers]
+    W -->|processing record| DB
+```
+
+The diagram is the intended event path. The actual success/failure of each edge must be established by runtime logs and integration tests; API success must not be treated as proof of broker delivery, consumer processing, or acknowledgement.
+
+### Deployment and validation matrix
+
+| Requirement | Repository evidence | Acceptance evidence still required |
+|---|---|---|
+| Reproducible frontend and API images | Separate Dockerfiles exist | Build both images from a clean checkout |
+| Service networking | Compose service DNS and Nginx API proxy are configured | Compose smoke test verifies browser/API reachability |
+| Persistent state | Compose named volume and Kubernetes PVC are declared | Create data, restart workload, verify data survives |
+| Inter-service messaging | RabbitMQ, dispatcher and worker are declared; API has outbox/publication logic | Publish a unique event and verify persisted consumer-processing evidence |
+| Container health | Compose health checks and Kubernetes API/frontend probes exist | All expected services/Pods become healthy/Ready |
+| Scaling | Compose worker scaling instructions and optional API HPA exist | Scale a fixed workload, record replicas and processing outcomes |
+| Kubernetes recovery | Guarded recovery probe script exists | Run only in a disposable cluster and record replacement readiness |
+| Frontend build | CI has a frontend production-build job | Latest branch CI passes; no unverified local claims |
+| Backend tests | CI has a pytest job | Latest branch CI passes, including integration coverage where configured |
+| Manifest structure | Static validator exists | Validator and rendered configuration checks pass |
+| Live Kubernetes deployment | Manifests and guides exist | Apply to kind/minikube/Docker Desktop Kubernetes and record actual Pod/service state |
+
+### Pull-request state audit
+
+Status checked on 2026-10-22. The following PRs were returned by the repository PR search and individually inspected:
+
+- **Merged:** #2, #4, #5, #6, #7, #8, #14, #15, #16, #17, #20, #24 and #25.
+- **Open and not mergeable at inspection time:** #1, #10, #12 and #23.
+- PR #10 (Mutual Exclusion) and PR #12 (Heartbeat Suspicion) overlap in scope with the merged combined implementation in #20. Do not merge them as-is; compare their unique changes against `main`, then close them if all useful functionality is already present.
+- PR #1 is an older foundation PR and must be compared against the much more complete merged implementation before any action. Do not merge it just to clear the open-PR list.
+- PR #23 adds a Communication Control Room wrapper beyond the existing message/stream studio merged through #14. It remains unmerged and was reported non-mergeable due to branch conflict. Do not merge until conflicts are resolved, the new component is compared with existing routes, and CI/runtime acceptance passes.
+
+“Closed” is not synonymous with “merged”; the merged state was checked separately. This list is a snapshot, not a live GitHub status guarantee.
+
+### Canonical deployment policy
+
+- `docker-compose.yml` is the canonical local multi-container launch path.
+- `infrastructure/kubernetes/` is the documented application-stack manifest path, with `api-hpa.yaml` applied only when metrics-server and CPU metrics are available.
+- `deploy/kubernetes/` is a separate Kustomize profile intended for laptop-local clusters. Keep it only while it offers a documented, tested use case; otherwise consolidate it into the canonical profile in a dedicated reviewed change. Never silently let the two profiles drift.
+- Do not commit real secrets. Placeholder credentials must be replaced through a secure local/cluster secret workflow before shared use.
+- Use a cluster context check and a disposable namespace/cluster before any destructive recovery experiment.
+
+### Acceptance gates
+
+1. **Static:** YAML parses; Compose and Kustomize references exist; workload/service selectors, probes, storage and HPA targets are structurally consistent.
+2. **Build:** frontend production build and API image build succeed from a clean checkout.
+3. **Unit/API:** backend tests and frontend TypeScript/build checks pass.
+4. **Compose integration:** the full stack becomes healthy; API persistence works; a unique event reaches the broker and worker; processing evidence is observable.
+5. **Kubernetes integration:** selected profile applies successfully; expected Pods are Ready; service-to-service calls work; PVC binds; a controlled replica scale changes actual ready replicas.
+6. **Recovery/scalability:** use fixed input workloads, record versions and environment, repeat runs, and report raw observations. Do not claim throughput improvements without measurements.
+7. **Documentation:** commands match the tested profile; architecture/sequence diagrams match the implementation; every limitation is explicit; no broken internal links or stale claims remain.
+
+### Current validation limitation
+
+GitHub source inspection confirms that CI is configured for backend tests, frontend build, manifest validation and a Docker Compose smoke test. At the time of this audit, the available status/run lookup did not return check results for the inspected latest commit. Therefore the existence of CI configuration is confirmed, but a passing current run and a successful Kubernetes cluster deployment are **not verified by this audit**. Record the actual CI run and cluster evidence before marking these gates complete.
