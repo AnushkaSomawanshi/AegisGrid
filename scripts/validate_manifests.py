@@ -43,15 +43,17 @@ def main() -> int:
 
     if "aegisgrid-db" not in compose.get("volumes", {}):
         errors.append("Compose must define persistent volume aegisgrid-db")
-    elif "aegisgrid-db" not in services.get("postgres", {}).get("volumes", []).__str__():
-        # Keep this readable while supporting both short and long Compose volume syntax.
-        postgres_volumes = services.get("postgres", {}).get("volumes", [])
-        if not any(
-            (entry == "aegisgrid-db:/var/lib/postgresql/data")
-            or (isinstance(entry, dict) and entry.get("source") == "aegisgrid-db")
-            for entry in postgres_volumes
-        ):
-            errors.append("Compose PostgreSQL service must mount aegisgrid-db at its data directory")
+    postgres_volumes = services.get("postgres", {}).get("volumes", [])
+    if not any(
+        (entry == "aegisgrid-db:/var/lib/postgresql/data")
+        or (
+            isinstance(entry, dict)
+            and entry.get("source") == "aegisgrid-db"
+            and entry.get("target") == "/var/lib/postgresql/data"
+        )
+        for entry in postgres_volumes
+    ):
+        errors.append("Compose PostgreSQL service must mount aegisgrid-db at /var/lib/postgresql/data")
 
     for service_name in ("api", "postgres", "rabbitmq"):
         if service_name in services and not services[service_name].get("healthcheck"):
