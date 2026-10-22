@@ -191,6 +191,12 @@ The dedicated leader-election page is an operations dashboard, not a theory arti
 
 Every ELECTION, OK, COORDINATOR, simulated timeout, node transition and leader-view change is recorded in the persisted trace. A higher node that responds starts its own election; a lower node receiving OK waits rather than claiming leadership. Failed processes never send messages.
 
+### Interactive process inspector and cursor-derived metrics
+
+The topology cards are selectable. Selecting P1–P5 opens a process inspector with that process's current executed state, availability, local coordinator belief, numeric priority, higher-ID candidates and lower-ID peers. This makes the Bully priority rule visible: only processes with a strictly greater ID are eligible to supersede the selected process. The panel uses the current event-cursor snapshot; selecting a future event in the ledger does not apply its node-state changes.
+
+The metric strip is derived from the executed prefix, not the final planned trace: ELECTION requests, OK responses, COORDINATOR announcements, active process count, announcement acceptance coverage and the coordinator declaration. An OK response is counted separately from a coordinator announcement because acknowledgement does not elect a leader. The consistency audit remains **PENDING** until the run is completed; final PASS/FAIL values are shown only after the completion cursor is reached. Process cards and event controls expose keyboard focus and selected-process state.
+
 ### Presets
 
 - Coordinator failure: P5 failed, P2 initiates, P4 wins.
