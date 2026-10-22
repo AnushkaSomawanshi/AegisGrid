@@ -31,7 +31,7 @@ export function MutualExclusionStudio() {
   const [notice, setNotice] = useState("");
   const current = scenarios.find(s => s.id === scenario) || scenarios[0];
   const executed = run?.trace.slice(0, run.current_step) || [];
-  const event = selectedStep === null ? executed.at(-1) : executed.find(e => e.step === selectedStep);
+  const event = selectedStep === null ? executed[executed.length - 1] : executed.find(e => e.step === selectedStep);
   const owner = useMemo(() => {
     let value: unknown = null;
     for (const item of executed) {
