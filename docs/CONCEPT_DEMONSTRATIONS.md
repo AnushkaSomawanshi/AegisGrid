@@ -427,3 +427,38 @@ The Mutual Exclusion navigation item now opens a resource-centric execution work
 9. Run `npm run build` in `frontend` and the backend test suite in the documented environment before merging.
 
 **Validation status:** this change was authored through the GitHub repository API. A local frontend build and backend test execution were not available in this authoring session; CI and reviewer verification are still required.
+
+
+## Beacon Protocol Control Room — interactive heartbeat suspicion demonstration
+
+The Distributed Runtime navigation item **Heartbeat suspicion** now opens a dedicated Beacon Protocol Control Room. The mutual-exclusion page remains separate and is not changed by this route. The page uses the existing persisted `beacon` experiment model in `POST /api/experiments` and the event-by-event execution endpoint `POST /api/experiments/{id}/step`.
+
+### What the user sees
+
+1. **Incident context:** a teaching fixture for incident `INC-1042` connects beacon monitoring to dispatch-worker communication health. The page explicitly says the experiment is simulated.
+2. **Fault-mode selector:** worker crash, network partition, delayed beacons, and intermittent loss/recovery. The selected mode is sent to the backend as `fault_mode`.
+3. **Detector configuration:** worker ID, beacon interval, suspicion timeout, number of expected missed beats, simulated network delay, packet-loss percentage, and an optional recovery phase.
+4. **Run controls:** create a persisted run, advance one event, run to completion, pause/resume the persisted run, clear the displayed run, and export evidence JSON.
+5. **Response topology:** Incident Coordinator, monitored Dispatch Worker, and Resource Allocator with current observer classification. The diagram is conceptual; the backend trace is authoritative.
+6. **Detector evidence:** accepted beacon count, missed-slot count, silence age, first suspicion timestamp, current observed state, and backend final classification.
+7. **Event timeline and inspector:** executed events are selectable; pending events are disabled. Each selected event exposes backend fields such as simulated timestamp, last receive time, elapsed silence, actual process state, observer state and decision reason when present.
+8. **Operational consequence:** the page illustrates a simulated assignment-review flag when suspicion has occurred. It never claims that a live dispatch unit was reassigned.
+9. **Correctness boundary:** the page explains that timeout-based suspicion cannot distinguish a process crash from delayed communication or a network partition on its own.
+
+### Existing backend model reused
+
+The backend `_trace_for("beacon", parameters)` model already produces deterministic events including `heartbeat.received`, `heartbeat.missed`, `failure.suspected`, and `heartbeat.recovered`. The UI sends supported parameters to that model rather than generating its own event order. The event cursor controls what is considered executed in the presentation.
+
+### Manual validation checklist
+
+1. Open Distributed Runtime → Heartbeat suspicion and confirm Beacon Protocol Control Room appears.
+2. Create a worker-crash run with interval 1000 ms and timeout 3000 ms; advance events and inspect the first `failure.suspected` event.
+3. Run the network-partition scenario and confirm the page describes observer suspicion without asserting that the worker process crashed.
+4. Run the delayed-beacon scenario with delay greater than the timeout and inspect both suspicion and subsequent received-beacon events.
+5. Run the recovery scenario and verify the trace includes recovery evidence and the final observer classification.
+6. Confirm pending events cannot be inspected before the cursor reaches them.
+7. Pause/resume a run, clear the displayed run, and export the JSON evidence bundle.
+8. Verify the Mutual Exclusion navigation item still opens the separate Critical Resource Control Room.
+9. Run frontend production build, backend tests, and Docker Compose smoke tests before merging.
+
+**Validation status:** changes were authored through the GitHub repository API. A local frontend build and backend test execution were not available during authoring; merge only after CI and reviewer checks pass.

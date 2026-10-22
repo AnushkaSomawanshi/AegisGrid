@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter, StreamMonitor } from "./AdvancedPanels";
 import { MutualExclusionStudio } from "./MutualExclusionStudio";
+import { BeaconProtocolControlRoom } from "./BeaconProtocolControlRoom";
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
 import { CommandCenter } from "./CommandCenter";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -153,7 +154,7 @@ function App(){
     {page==="stream"&&<StreamMonitor/>}
     {page==="experiments"&&<ExperimentWorkbench/>}
     {page==="labs"&&selectedLab==="mutex"&&<MutualExclusionStudio/>}
-    {page==="labs"&&selectedLab==="failure"&&<ExperimentWorkbench key={selectedLab} initialLab="beacon"/>}
+    {page==="labs"&&selectedLab==="failure"&&<BeaconProtocolControlRoom/>}
     {page==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("experiments")}/>}
     {page==="vector-demo"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
     {page==="election-demo"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
