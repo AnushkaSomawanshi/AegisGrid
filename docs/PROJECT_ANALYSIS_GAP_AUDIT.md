@@ -226,7 +226,7 @@ The diagram is the intended event path. The actual success/failure of each edge 
 
 Status checked on 2026-10-22. The following PRs were returned by the repository PR search and individually inspected:
 
-- **Merged:** #2, #4, #5, #6, #7, #8, #14, #15, #16, #17, #20, #24 and #25.
+- **Merged:** #2, #4, #5, #6, #7, #8, #14, #15, #16, #17, #20, #24, #25, #26 and #27.
 - **Open and not mergeable at inspection time:** #1, #10, #12 and #23.
 - PR #10 (Mutual Exclusion) and PR #12 (Heartbeat Suspicion) overlap in scope with the merged combined implementation in #20. Do not merge them as-is; compare their unique changes against `main`, then close them if all useful functionality is already present.
 - PR #1 is an older foundation PR and must be compared against the much more complete merged implementation before any action. Do not merge it just to clear the open-PR list.
