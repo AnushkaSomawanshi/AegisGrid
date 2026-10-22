@@ -90,3 +90,23 @@
 @media(min-width:1500px){.ecc-workspace{grid-template-columns:minmax(270px,21%) minmax(0,1fr) minmax(280px,21%)}.ecc-map-canvas{height:clamp(620px,calc(100vh - 365px),1200px)}}
 @media(max-width:1120px){.ecc-workspace{height:auto;min-height:0;grid-template-columns:minmax(230px,34%) minmax(0,1fr)}.ecc-map-canvas{height:clamp(420px,65vh,760px)}.ecc-detail{overflow:visible}}
 @media(max-width:760px){.ecc-workspace{height:auto;display:flex;flex-direction:column}.ecc-queue{max-height:none;overflow:visible}.ecc-queue-list{flex:unset;max-height:330px}.ecc-map-canvas{height:62vh;min-height:390px}.ecc-map-panel-expanded{inset:6px}.ecc-map-panel-expanded .ecc-map-canvas{height:auto;min-height:0;flex:1}.ecc-map-toolbar{flex-direction:column;align-items:stretch}.ecc-map-actions{justify-content:flex-start}.ecc-detail{overflow:visible}}
+
+
+/* Command-centre final layout pass: map-first, reference-inspired, no release card. */
+.ecc-shell{width:100%;max-width:none;min-width:0;overflow:visible}
+.ecc-workspace{grid-template-columns:minmax(250px,21.5%) minmax(0,1fr) minmax(270px,21.5%);height:calc(100dvh - 245px);min-height:600px;align-items:stretch}
+.ecc-queue,.ecc-map-panel,.ecc-detail{min-width:0;min-height:0}
+.ecc-queue{overflow:hidden}
+.ecc-queue-list{min-height:0;max-height:none;flex:1}
+.ecc-map-panel{overflow:hidden}
+.ecc-map-canvas.ecc-map-canvas-real{height:auto;min-height:0;flex:1;position:relative}
+.ecc-leaflet-map,.ecc-map-canvas-real .leaflet-container{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+.ecc-map-stamp,.ecc-map-legend,.ecc-map-empty{z-index:500}
+.ecc-map-empty{max-width:310px}
+.ecc-detail{overflow-y:auto;overscroll-behavior:contain}
+.ecc-map-panel-expanded{position:fixed!important;inset:12px!important;z-index:9999!important;min-height:0!important;height:auto!important}
+.ecc-map-panel-expanded .ecc-map-canvas.ecc-map-canvas-real{min-height:0;flex:1}
+.ecc-map-panel-expanded .leaflet-container{height:100%;width:100%}
+@media(max-width:1350px){.ecc-workspace{grid-template-columns:minmax(225px,24%) minmax(0,1fr) minmax(245px,24%);height:calc(100dvh - 265px)}.ecc-topbar{align-items:center}.ecc-map-toolbar p{max-width:380px}}
+@media(max-width:1120px){.ecc-workspace{height:auto;min-height:0;grid-template-columns:minmax(230px,34%) minmax(0,1fr)}.ecc-map-canvas.ecc-map-canvas-real{height:clamp(440px,65dvh,820px);flex:unset}.ecc-detail{overflow:visible}}
+@media(max-width:760px){.ecc-workspace{height:auto;min-height:0;display:flex;flex-direction:column}.ecc-queue{overflow:visible}.ecc-queue-list{flex:unset;max-height:330px}.ecc-map-canvas.ecc-map-canvas-real{height:65dvh;min-height:420px}.ecc-detail{overflow:visible}.ecc-map-panel-expanded{inset:5px!important}.ecc-map-panel-expanded .ecc-map-canvas.ecc-map-canvas-real{height:auto;min-height:0;flex:1}}
