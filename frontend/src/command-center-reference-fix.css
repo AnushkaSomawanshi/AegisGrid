@@ -1,0 +1,118 @@
+/* Static operational-map fallback: intentionally no third-party raster tiles or API-key overlays. */
+.ecc-shell {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  overflow: visible;
+  box-sizing: border-box;
+}
+.ecc-shell *,
+.ecc-shell *::before,
+.ecc-shell *::after { box-sizing: border-box; }
+.ecc-workspace {
+  width: 100%;
+  grid-template-columns: minmax(235px, 21%) minmax(0, 1fr) minmax(260px, 23%);
+  gap: 10px;
+  height: calc(100dvh - 245px);
+  min-height: 560px;
+  align-items: stretch;
+}
+.ecc-queue, .ecc-map-panel, .ecc-detail { min-width: 0; min-height: 0; }
+.ecc-map-panel { display: flex; flex-direction: column; overflow: hidden; }
+.ecc-map-canvas.ecc-map-canvas-real {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  isolation: isolate;
+  background: #091b2a;
+  border: 1px solid #20394b;
+  border-radius: 0 0 8px 8px;
+}
+/* Hide raster tiles completely. This prevents the CARTO "API KEY REQUIRED" error
+   tiles from ever appearing. Leaflet markers, route overlays and controls remain active. */
+.ecc-leaflet-map .leaflet-tile-pane { display: none !important; }
+.ecc-leaflet-map,
+.ecc-map-canvas-real .leaflet-container {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+  font-family: inherit;
+}
+.ecc-leaflet-map::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  pointer-events: none;
+  background-color: #0a1b2a;
+  background-image:
+    linear-gradient(28deg, transparent 0 47%, #123d4b 47.2% 48.1%, #0b2938 48.3% 49.4%, transparent 49.6%),
+    linear-gradient(112deg, transparent 0 43%, #102f40 43.2% 44%, #0c2536 44.2% 45.3%, transparent 45.5%),
+    linear-gradient(0deg, transparent 0 24%, #1b3442 24.2% 24.7%, transparent 24.9% 66%, #1b3442 66.2% 66.7%, transparent 66.9%),
+    linear-gradient(90deg, transparent 0 18%, #1b3442 18.2% 18.7%, transparent 18.9% 37%, #1b3442 37.2% 37.7%, transparent 37.9% 73%, #1b3442 73.2% 73.7%, transparent 73.9%),
+    repeating-linear-gradient(0deg, transparent 0 43px, #193244 44px, transparent 46px 88px),
+    repeating-linear-gradient(90deg, transparent 0 51px, #193244 52px, transparent 54px 102px),
+    radial-gradient(ellipse at 50% 50%, #163c4a 0, #0e2a3b 42%, #091b2a 78%);
+  background-size: 100% 100%;
+}
+.ecc-leaflet-map::after {
+  content: "";
+  position: absolute;
+  inset: -20% -10%;
+  z-index: 151;
+  pointer-events: none;
+  opacity: .85;
+  background:
+    linear-gradient(153deg, transparent 0 43%, #17617a 43.2% 44.4%, #0d344b 44.6% 46%, transparent 46.2%),
+    linear-gradient(153deg, transparent 0 44%, #36b9d5 44.15% 44.35%, transparent 44.5%);
+  clip-path: polygon(0 48%, 18% 42%, 32% 46%, 48% 37%, 61% 43%, 77% 31%, 100% 34%, 100% 48%, 78% 44%, 62% 56%, 48% 50%, 31% 59%, 17% 54%, 0 61%);
+}
+.ecc-leaflet-map .leaflet-overlay-pane,
+.ecc-leaflet-map .leaflet-marker-pane,
+.ecc-leaflet-map .leaflet-tooltip-pane,
+.ecc-leaflet-map .leaflet-popup-pane,
+.ecc-leaflet-map .leaflet-control-container { z-index: 400; }
+.ecc-map-stamp, .ecc-map-legend, .ecc-map-empty { z-index: 600; }
+.ecc-map-empty { display: none !important; }
+.ecc-map-stamp { background: #071725eF; border: 1px solid #24475b; }
+.ecc-map-legend { background: #071725ee; border: 1px solid #24475b; }
+.ecc-map-bottom { flex: 0 0 auto; }
+.ecc-map-bottom > div span { line-height: 1.45; }
+.ecc-topbar { min-width: 0; }
+.ecc-brand { min-width: 0; }
+.ecc-detail { overflow-y: auto; overscroll-behavior: contain; }
+.ecc-queue { overflow: hidden; }
+.ecc-queue-list { min-height: 0; max-height: none; flex: 1 1 auto; overflow-y: auto; }
+.ecc-event-stream { width: 100%; min-width: 0; }
+.ecc-event-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.ecc-event-card { min-width: 0; overflow: hidden; }
+.ecc-footer { width: 100%; min-width: 0; }
+.ecc-map-panel-expanded { position: fixed !important; inset: 12px !important; z-index: 9999 !important; display: flex !important; flex-direction: column !important; height: auto !important; min-height: 0 !important; background: #061321 !important; }
+.ecc-map-panel-expanded .ecc-map-canvas.ecc-map-canvas-real { flex: 1 1 auto; min-height: 0; height: auto; }
+@media (min-width: 1450px) {
+  .ecc-workspace { grid-template-columns: minmax(250px, 21%) minmax(0, 1fr) minmax(270px, 23%); }
+}
+@media (max-width: 1150px) {
+  .ecc-workspace { grid-template-columns: minmax(220px, 34%) minmax(0, 1fr); height: auto; min-height: 0; }
+  .ecc-map-canvas.ecc-map-canvas-real { height: clamp(430px, 62dvh, 760px); flex: none; }
+  .ecc-detail { grid-column: 1 / -1; overflow: visible; }
+  .ecc-event-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .ecc-shell { margin: 0; }
+  .ecc-workspace { display: flex; flex-direction: column; height: auto; min-height: 0; gap: 10px; }
+  .ecc-topbar { flex-wrap: wrap; }
+  .ecc-brand { flex: 1 1 100%; }
+  .ecc-queue { overflow: visible; }
+  .ecc-queue-list { max-height: 320px; flex: none; }
+  .ecc-map-canvas.ecc-map-canvas-real { height: 62dvh; min-height: 400px; }
+  .ecc-detail { overflow: visible; }
+  .ecc-event-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
