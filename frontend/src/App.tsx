@@ -8,6 +8,7 @@ import {
   Siren, Terminal, Workflow, X, Zap
 } from "lucide-react";
 import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter, StreamMonitor } from "./AdvancedPanels";
+import { MutualExclusionStudio } from "./MutualExclusionStudio";
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
 import { CommandCenter } from "./CommandCenter";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -151,7 +152,8 @@ function App(){
     {page==="messaging"&&<MessagingConsole/>}
     {page==="stream"&&<StreamMonitor/>}
     {page==="experiments"&&<ExperimentWorkbench/>}
-    {page==="labs"&&(selectedLab==="mutex"||selectedLab==="failure")&&<ExperimentWorkbench key={selectedLab} initialLab={selectedLab==="failure"?"beacon":"mutex"}/>}
+    {page==="labs"&&selectedLab==="mutex"&&<MutualExclusionStudio/>}
+    {page==="labs"&&selectedLab==="failure"&&<ExperimentWorkbench key={selectedLab} initialLab="beacon"/>}
     {page==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("experiments")}/>}
     {page==="vector-demo"&&<VectorClockDemo onBack={()=>navigate("experiments")}/>}
     {page==="election-demo"&&<LeaderElectionDemo onBack={()=>navigate("experiments")}/>}
