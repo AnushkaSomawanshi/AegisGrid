@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { Activity, ArrowUpRight, Bell, Clock3, Crosshair, Filter, Layers3, MapPin, Plus, Radio, RefreshCw, Search, Server, ShieldCheck, Siren, Workflow } from "lucide-react";
+import { Activity, ArrowUpRight, Bell, Clock3, Filter, Layers3, MapPin, Plus, RefreshCw, Search, Server, ShieldCheck, Siren, Workflow } from "lucide-react";
 
 type Incident={id:number;title:string;category:string;severity:"low"|"medium"|"high"|"critical";status:"open"|"assigned"|"responding"|"resolved";location:string;description:string;created_at:string;latitude?:number|null;longitude?:number|null;lat?:number|null;lng?:number|null;coordinates?:{latitude?:number;longitude?:number;lat?:number;lng?:number}|null};
 type EventItem={id:number;event_type:string;source:string;payload:unknown;created_at:string};
