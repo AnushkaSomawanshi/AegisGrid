@@ -131,7 +131,7 @@ function App(){
  const visibleEvents=events.filter(e=>(eventFilter==="all"||e.event_type.includes(eventFilter))&&`${e.event_type} ${e.source}`.toLowerCase().includes(search.toLowerCase()));
  const services=overview?.services||[];
  const activeLab=labList.find(l=>l.id===selectedLab)||labList[0];
- function navigate(id:string){if(id.startsWith("lab-")){setSelectedLab(id.slice(4));setPage("labs");}else if(id==="docs"||id==="experiments"){setPage("command");}else{setPage(id);}setSidebarOpen(false);setNotice("");}
+ function navigate(id:string){if(id.startsWith("lab-")){setSelectedLab(id.slice(4));setPage("labs");}else if(id==="experiments"){setPage("command");}else{setPage(id);}setSidebarOpen(false);setNotice("");}
  const headerTitle=nav.flatMap(s=>s.items).find(i=>i.id===page)?.name||"Command centre";
 
  return <div className="app-shell">
