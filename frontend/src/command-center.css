@@ -171,3 +171,30 @@
 @media(max-width:1280px){.ecc-workspace{grid-template-columns:minmax(0,22fr) minmax(0,56fr) minmax(0,22fr);height:auto;min-height:0}.ecc-map-canvas.ecc-map-canvas-real{height:calc(100dvh - 400px);min-height:440px}.ecc-event-cards{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:950px){.ecc-workspace{grid-template-columns:minmax(0,38fr) minmax(0,62fr)}.ecc-detail{grid-column:1/-1}.ecc-event-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.ecc-topbar{flex-wrap:wrap}.ecc-workspace{display:flex;flex-direction:column}.ecc-event-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.ecc-map-canvas.ecc-map-canvas-real{height:60dvh;min-height:400px}}
+
+/* Reference map artwork: self-contained asset; no external tile/API-key dependency. */
+.ecc-command-v2 .ecc-map-canvas-real {
+  background: #061426 url("/assets/aegisgrid-operational-map.svg") center / cover no-repeat !important;
+}
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-container {
+  background: transparent !important;
+}
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-tile-pane {
+  display: none !important;
+}
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-overlay-pane,
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-marker-pane,
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-tooltip-pane,
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-popup-pane,
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-control-container {
+  z-index: 500;
+}
+.ecc-command-v2 .ecc-map-canvas-real .leaflet-control-attribution {
+  display: none !important;
+}
+@media (max-width: 760px) {
+  .ecc-command-v2 .ecc-map-canvas-real {
+    background-position: center;
+    background-size: cover;
+  }
+}
