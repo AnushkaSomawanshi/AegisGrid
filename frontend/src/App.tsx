@@ -166,7 +166,7 @@ function App(){
     {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
     {page==="labs"&&selectedLab==="messaging"&&<CommunicationDemo initialMode="messaging" onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab==="stream"&&<CommunicationDemo initialMode="stream" onBack={()=>navigate("experiments")}/>}
-    {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&selectedLab!=="mutex"&&selectedLab!=="failure"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
+    {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="snapshot"&&selectedLab!=="vector"&&selectedLab!=="election"&&selectedLab!=="mutex"&&selectedLab!=="failure"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
     {page==="scale"&&<ScalePage apiState={apiState} onNavigate={navigate}/>}
     {page==="deployment"&&<DeploymentStudio onBack={()=>navigate("command")}/>}
