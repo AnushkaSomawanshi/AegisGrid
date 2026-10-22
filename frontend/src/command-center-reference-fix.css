@@ -104,3 +104,80 @@
   .ecc-detail { overflow: visible; }
   .ecc-event-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+
+/* Exact user-supplied reference map: make the image the sole visible map layer. */
+.ecc-shell {
+  width: 100%;
+  max-width: none;
+  margin: -22px -26px -10px;
+  min-height: calc(100dvh - 84px);
+}
+.ecc-workspace {
+  grid-template-columns: minmax(320px, 25fr) minmax(0, 50fr) minmax(320px, 25fr) !important;
+  gap: 12px;
+  width: 100%;
+  height: calc(100dvh - 250px);
+  min-height: 590px;
+  align-items: stretch;
+}
+.ecc-queue, .ecc-map-panel, .ecc-detail { min-width: 0; min-height: 0; }
+.ecc-queue, .ecc-detail { overflow: hidden; }
+.ecc-queue-list { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+.ecc-map-panel { display: flex; flex-direction: column; overflow: hidden; }
+.ecc-map-toolbar { flex: 0 0 auto; }
+.ecc-map-canvas.ecc-map-canvas-real {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 0;
+  background: #071321;
+  border: 1px solid #263d52;
+}
+.ecc-reference-map-image {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  background: #071321;
+}
+.ecc-map-canvas-real .ecc-leaflet-map,
+.ecc-map-canvas-real .leaflet-container,
+.ecc-map-canvas-real .ecc-map-stamp,
+.ecc-map-canvas-real .ecc-map-legend,
+.ecc-map-canvas-real .ecc-map-empty,
+.ecc-map-bottom { display: none !important; }
+.ecc-detail { overflow-y: auto; overscroll-behavior: contain; }
+.ecc-event-stream { margin-top: 8px; }
+.ecc-map-panel-expanded { position: fixed !important; inset: 12px !important; z-index: 9999 !important; display: flex !important; flex-direction: column !important; height: auto !important; min-height: 0 !important; background: #061321 !important; }
+.ecc-map-panel-expanded .ecc-map-canvas.ecc-map-canvas-real { flex: 1 1 auto; min-height: 0; height: auto; }
+.ecc-map-panel-expanded .ecc-reference-map-image { object-fit: contain; }
+@media (min-width: 1500px) {
+  .ecc-workspace { grid-template-columns: minmax(340px, 25fr) minmax(0, 50fr) minmax(340px, 25fr) !important; }
+}
+@media (max-width: 1250px) {
+  .ecc-workspace { grid-template-columns: minmax(260px, 38fr) minmax(0, 62fr) !important; height: auto; min-height: 0; }
+  .ecc-map-canvas.ecc-map-canvas-real { height: clamp(460px, 62dvh, 820px); min-height: 460px; flex: none; }
+  .ecc-detail { grid-column: 1 / -1; overflow: visible; }
+}
+@media (max-width: 760px) {
+  .ecc-shell { margin: 0; min-height: 0; }
+  .ecc-workspace { display: flex; flex-direction: column; height: auto; min-height: 0; gap: 10px; }
+  .ecc-queue { overflow: visible; }
+  .ecc-queue-list { max-height: 340px; flex: none; }
+  .ecc-map-canvas.ecc-map-canvas-real { height: 62dvh; min-height: 400px; flex: none; }
+  .ecc-detail { overflow: visible; }
+  .ecc-reference-map-image { object-fit: contain; }
+}
