@@ -139,32 +139,48 @@ PostgreSQL and RabbitMQ are configured as singleton stateful workloads in these 
 
 ```text
 AegisGrid/
-├── frontend/                         # React + TypeScript operations dashboard
-│   ├── src/App.tsx                   # Pages, concept labs and UI state
-│   ├── src/styles.css                # Responsive visual system
-│   ├── Dockerfile                    # Multi-stage image
-│   └── nginx.conf                    # API/WebSocket proxy + SPA fallback
+├── README.md
+├── docker-compose.yml                 # Six-service local development stack
+├── .env.example                       # Development-only example values
+├── .github/workflows/ci.yml           # Backend, frontend, manifest and Compose smoke checks
+├── frontend/
+│   ├── Dockerfile                     # Vite build stage + Nginx runtime
+│   ├── nginx.conf                     # SPA fallback, API proxy and WebSocket proxy
+│   └── src/                           # React/TypeScript dashboard and concept studios
 ├── services/api/
-│   ├── app/main.py                   # FastAPI gateway and HTTP/WebSocket routes
-│   ├── app/db.py                     # SQLAlchemy incident/event models
-│   ├── app/broker.py                 # RabbitMQ publisher
-│   ├── app/worker.py                 # Independent consumer process
-│   ├── app/labs.py                   # Distributed-systems teaching models
-│   ├── tests/test_api.py             # API test cases
-│   └── Dockerfile
+│   ├── Dockerfile                     # Shared Python image for API and background processes
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── main.py                   # FastAPI routes and incident/event workflow
+│   │   ├── db.py                     # SQLAlchemy models and sessions
+│   │   ├── broker.py                 # RabbitMQ publication
+│   │   ├── outbox_dispatcher.py      # Pending outbox publication/retry loop
+│   │   ├── worker.py                 # Independent consumer and processing ledger
+│   │   ├── labs.py                   # Distributed-systems teaching models
+│   │   └── advanced.py               # Advanced experiment APIs
+│   └── tests/
+│       └── test_api.py
 ├── infrastructure/kubernetes/
 │   ├── namespace.yaml
-│   └── app-stack.yaml                # Frontend, API, worker, DB and broker workloads
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── CONCEPT_DEMONSTRATIONS.md
-│   ├── DOCKER_GUIDE.md
-│   ├── KUBERNETES_GUIDE.md
-│   ├── EXPERIMENTS.md
-│   └── DEMO_SCRIPT.md
-├── docker-compose.yml
-└── .env.example
+│   ├── app-stack.yaml                # Application, worker, database, broker and PVC
+│   └── api-hpa.yaml                  # Optional; requires metrics-server
+├── deploy/kubernetes/
+│   └── kustomization.yaml            # Separate laptop-local Kustomize profile + resources
+├── scripts/
+│   ├── validate_manifests.py         # Static structural checks (not a cluster deployment test)
+│   └── k8s_recovery_probe.py         # Guarded replacement-Pod readiness measurement
+└── docs/
+    ├── ARCHITECTURE.md
+    ├── CONCEPT_DEMONSTRATIONS.md
+    ├── DEMO_SCRIPT.md
+    ├── DOCKER_GUIDE.md
+    ├── KUBERNETES_GUIDE.md
+    ├── DOCKER_KUBERNETES_DEMONSTRATION.md
+    ├── EXPERIMENTS.md
+    └── PROJECT_ANALYSIS_GAP_AUDIT.md
 ```
+
+**Deployment-profile note:** `infrastructure/kubernetes/` is the documented application-stack path. `deploy/kubernetes/` is a separate Kustomize profile for laptop-local clusters, not an overlay of the first path. Use one profile for a demonstration, record which profile was applied, and keep both aligned until they can be safely consolidated. Do not assume that applying one profile also applies the other.
 
 ## Concept modules
 
