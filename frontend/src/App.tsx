@@ -32,7 +32,7 @@ type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 
 const nav = [
   {label:"OPERATIONS",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & dispatch",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow}]},
-  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"concepts",name:"Concept laboratory",icon:BookOpen},{id:"lab-messaging",name:"Message-oriented communication",icon:MessageSquare},{id:"lab-stream",name:"Stream-oriented communication",icon:Radio},{id:"lab-physical-clock",name:"Physical clock synchronization",icon:Clock3},{id:"lab-lamport",name:"Lamport logical clocks",icon:GitBranch},{id:"lab-vector",name:"Vector clocks",icon:GitBranch},{id:"lab-snapshot",name:"Global state snapshot",icon:Workflow},{id:"lab-election",name:"Leader election",icon:Network},{id:"lab-mutex",name:"Distributed mutual exclusion",icon:ShieldCheck},{id:"lab-failure",name:"Heartbeat failure detection",icon:Activity}]},
+  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"lab-messaging",name:"Message-oriented communication",icon:MessageSquare},{id:"lab-stream",name:"Stream-oriented communication",icon:Radio},{id:"lab-physical-clock",name:"Physical clock synchronization",icon:Clock3},{id:"lab-lamport",name:"Lamport logical clocks",icon:GitBranch},{id:"lab-vector",name:"Vector clocks",icon:GitBranch},{id:"lab-snapshot",name:"Global state snapshot",icon:Workflow},{id:"lab-election",name:"Leader election",icon:Network},{id:"lab-mutex",name:"Distributed mutual exclusion",icon:ShieldCheck},{id:"lab-failure",name:"Heartbeat failure detection",icon:Activity}]},
   {label:"INFRASTRUCTURE",items:[{id:"deployment",name:"Docker & Kubernetes",icon:Boxes},{id:"scale",name:"Scaling & resilience",icon:Layers3},{id:"runtime",name:"Runtime diagnostics",icon:Terminal}]}
 ];
 
@@ -150,7 +150,6 @@ function App(){
     {notice&&<div className="notice"><CheckCircle2 size={16}/><span>{notice}</span><button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={15}/></button></div>}
     {page==="command"&&<CommandCenter overview={overview} incidents={incidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
     {page==="resources"&&<ResourceCenter/>}
-    {page==="concepts"&&<ConceptsPage onNavigate={navigate}/>}
     {page==="delivery"&&<ProjectDeliveryPage onNavigate={navigate}/>}
     {page==="messaging"&&<MessagingConsole/>}
     {page==="stream"&&<StreamMonitor/>}
@@ -273,10 +272,6 @@ function ProjectDeliveryPage({onNavigate}:{onNavigate:(p:string)=>void}){
   <section className="panel" style={{marginTop:20,padding:20}}><div className="section-head"><div><h2>Not merged today</h2><p>Kept separate so the dashboard does not imply unfinished work is already part of main.</p></div><AlertCircle size={20}/></div><article className="docs-component"><span>PR #23 / OPEN</span><b>Communication Control Room workspace</b><p>Proposes a five-transport catalogue covering RPC, message-oriented, stream-oriented, P2P and WebRTC. The proposal states that RPC/P2P/WebRTC are illustrative and does not claim all transports are production-backed. The existing message/stream execution lab is already available separately.</p><a href="https://github.com/AnushkaSomawanshi/AegisGrid/pull/23" target="_blank" rel="noreferrer">Review open PR #23 <ArrowUpRight size={13}/></a></article></section>
  </>;
 }
-function ConceptsPage({onNavigate}:{onNavigate:(p:string)=>void}){
- return <><PageIntro eyebrow="DISTRIBUTED SYSTEMS / CONCEPT CATALOGUE" title="Concept laboratory" subtitle="Open the merged demonstrations from one place. Each card takes you directly to the corresponding interactive lab or runtime view."/><div className="docs-architecture-cards">{labList.map((lab,index)=><article className="docs-component" key={lab.id}><span>{String(index+1).padStart(2,"0")} / {lab.tag}</span><b>{lab.title}</b><code>{lab.algorithm}</code><p>{lab.description}</p><button className="btn-secondary" onClick={()=>onNavigate(lab.id==="infrastructure"?"deployment":`lab-${lab.id}`)}>Open demonstration <ChevronRight size={14}/></button></article>)}</div><div className="docs-callout"><BookOpen size={17}/><p>Some protocol labs are deterministic educational simulations; check each lab's runtime notes before presenting sample values as live measurements.</p></div></>;
-}
-
 function DocsPage({onNavigate}:{onNavigate:(p:string)=>void}){
  const [section,setSection]=useState("overview");
  const tabs=[{id:"overview",label:"Project brief"},{id:"architecture",label:"Architecture"},{id:"concepts",label:"Concepts"},{id:"deploy",label:"Deployment"},{id:"evaluation",label:"Evaluation"}];
