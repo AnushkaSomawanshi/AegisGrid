@@ -18,6 +18,7 @@ import { VectorClockDemo } from "./VectorClockDemo";
 import { LeaderElectionDemo } from "./LeaderElectionDemo";
 import { DeploymentStudio } from "./DeploymentStudio";
 import { CommunicationDemo } from "./CommunicationDemo";
+import { CommunicationControlRoom } from "./CommunicationControlRoom";
 import { PhysicalClockLab } from "./PhysicalClockLab";
 import { LamportClockLab } from "./LamportClockLab";
 
@@ -150,7 +151,7 @@ function App(){
     {notice&&<div className="notice"><CheckCircle2 size={16}/><span>{notice}</span><button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={15}/></button></div>}
     {page==="command"&&<CommandCenter overview={overview} incidents={incidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
     {page==="resources"&&<ResourceCenter/>}
-    {page==="messaging"&&<MessagingConsole/>}
+    {page==="messaging"&&<CommunicationControlRoom onBack={()=>navigate("experiments")}/>}
     {page==="stream"&&<StreamMonitor/>}
     {page==="experiments"&&<ExperimentWorkbench/>}
     {page==="labs"&&selectedLab==="mutex"&&<MutualExclusionStudio/>}
