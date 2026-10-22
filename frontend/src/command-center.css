@@ -62,3 +62,31 @@
 @media(min-width:1500px){.ecc-command-v2 .ecc-workspace{grid-template-columns:minmax(285px,22%) minmax(560px,1fr) minmax(300px,23%)}.ecc-command-v2 .ecc-map-canvas-real,.ecc-command-v2 .ecc-leaflet-map{min-height:620px}}
 @media(max-width:1250px){.ecc-command-v2 .ecc-workspace{grid-template-columns:minmax(230px,28%) minmax(0,1fr);grid-template-rows:minmax(460px,1fr) auto}.ecc-command-v2 .ecc-detail{grid-column:1/-1;border-top:1px solid #1c2b3c;border-left:0;display:grid;grid-template-columns:1fr 1fr;column-gap:18px}.ecc-command-v2 .ecc-map-canvas-real,.ecc-command-v2 .ecc-leaflet-map{min-height:460px}}
 @media(max-width:760px){.ecc-command-v2 .ecc-workspace{display:flex;flex-direction:column;min-height:0}.ecc-command-v2 .ecc-queue{min-height:320px}.ecc-command-v2 .ecc-map-panel{order:2}.ecc-command-v2 .ecc-detail{order:3;display:flex}.ecc-command-v2 .ecc-map-canvas-real,.ecc-command-v2 .ecc-leaflet-map{min-height:420px}.ecc-command-v2 .ecc-map-toolbar{flex-direction:column}.ecc-command-v2 .ecc-map-actions{flex-wrap:wrap}.ecc-command-v2 .ecc-map-empty{width:calc(100% - 32px);padding:15px}.ecc-command-v2 .ecc-map-legend{bottom:10px;right:10px}.ecc-command-v2 .ecc-map-stamp{left:10px;top:10px}}
+
+
+/* Operational command centre: prioritize a readable geographic workspace. */
+.ecc-shell{min-height:calc(100vh - 78px);height:auto}
+.ecc-topbar{min-height:76px;padding:10px 16px}
+.ecc-actionbar{padding:9px 16px}
+.ecc-workspace{grid-template-columns:minmax(245px,22%) minmax(0,1fr) minmax(260px,22%);min-height:0;height:calc(100vh - 250px);flex:1;align-items:stretch}
+.ecc-queue,.ecc-detail{min-height:0;overflow:hidden}
+.ecc-queue-list{flex:1;min-height:0;max-height:none;overscroll-behavior:contain}
+.ecc-map-panel{min-height:0;min-width:0;overflow:hidden}
+.ecc-map-toolbar{padding:12px 14px 10px;align-items:center}
+.ecc-map-toolbar h2{font-size:16px}
+.ecc-map-canvas{min-height:0;flex:1;height:100%;height:clamp(560px,calc(100vh - 390px),1000px)}
+.ecc-map-canvas-real{position:relative;isolation:isolate}
+.ecc-leaflet-map{position:absolute;inset:0;width:100%;height:100%;background:#071321}
+.ecc-map-actions{flex-wrap:wrap;justify-content:flex-end}
+.ecc-map-actions .ecc-map-expand{background:#103341;border-color:#23758a;color:#d8faff}
+.ecc-detail{overflow-y:auto;overscroll-behavior:contain}
+.ecc-detail .ecc-layers{margin-top:16px}
+.ecc-map-panel-expanded{position:fixed!important;inset:14px;z-index:1500;background:#07111d;border:1px solid #2b5369;border-radius:14px;box-shadow:0 24px 100px #000c;display:flex;flex-direction:column;min-height:0}
+.ecc-map-panel-expanded .ecc-map-toolbar{flex:0 0 auto}
+.ecc-map-panel-expanded .ecc-map-canvas{height:auto;min-height:0;flex:1}
+.ecc-map-panel-expanded .ecc-map-bottom{flex:0 0 auto}
+.ecc-map-panel-expanded .ecc-leaflet-map{height:100%;width:100%}
+.ecc-map-panel-expanded .leaflet-container{font:12px inherit}
+@media(min-width:1500px){.ecc-workspace{grid-template-columns:minmax(270px,21%) minmax(0,1fr) minmax(280px,21%)}.ecc-map-canvas{height:clamp(620px,calc(100vh - 365px),1200px)}}
+@media(max-width:1120px){.ecc-workspace{height:auto;min-height:0;grid-template-columns:minmax(230px,34%) minmax(0,1fr)}.ecc-map-canvas{height:clamp(420px,65vh,760px)}.ecc-detail{overflow:visible}}
+@media(max-width:760px){.ecc-workspace{height:auto;display:flex;flex-direction:column}.ecc-queue{max-height:none;overflow:visible}.ecc-queue-list{flex:unset;max-height:330px}.ecc-map-canvas{height:62vh;min-height:390px}.ecc-map-panel-expanded{inset:6px}.ecc-map-panel-expanded .ecc-map-canvas{height:auto;min-height:0;flex:1}.ecc-map-toolbar{flex-direction:column;align-items:stretch}.ecc-map-actions{justify-content:flex-start}.ecc-detail{overflow:visible}}
