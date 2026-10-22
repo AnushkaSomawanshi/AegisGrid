@@ -25,20 +25,20 @@ The platform demonstrates containerization, service boundaries, persistence, syn
 1. User submits a validated incident form from the frontend.
 2. Frontend sends `POST /api-proxy/incidents`, Nginx forwards it to the API's `/api/incidents`.
 3. FastAPI validates title, severity, category, location and description.
-4. API persists the incident in PostgreSQL.
-5. API appends an `incident.created` record to the event ledger.
-6. API attempts to publish a durable JSON message to RabbitMQ. The API response includes the broker outcome separately from database persistence.
-7. The event worker consumes the message and appends `worker.processed` to the ledger.
-8. The dashboard can query incident state and event traces independently.
+4. API commits the incident row to PostgreSQL.
+5. The event recorder commits an `incident.created` ledger row and its outbox envelope together in a separate database transaction.
+6. API attempts a fast-path publication to RabbitMQ and returns the persistence, broker and outbox outcomes separately.
+7. If publication fails or is ambiguous, the independent outbox dispatcher retries pending rows; the worker consumes the message and records `worker.processed` after processing.
+8. The dashboard can inspect incident state, event ledger and outbox state independently.
 
-**Consistency boundary:** incident persistence and event publication are not one distributed transaction. The event recorder commits the event ledger and outbox envelope together in one database transaction, then attempts a fast-path RabbitMQ publication. If publication fails or is ambiguous, the outbox dispatcher retries pending rows. The consumer deduplicates stable event IDs before recording processing. This reduces the chance of losing an event between database commit and broker publication, but it does not make the database and broker one atomic transaction. Validate each stage separately.
+**Consistency boundary:** this teaching implementation does not make incident persistence, event/outbox recording and broker delivery one atomic operation. The incident row is committed before the event/outbox transaction, so failure between these operations can leave an incident without its expected event. The event ledger row and its outbox envelope are atomic with each other; the dispatcher retries pending publication; the consumer deduplicates stable event IDs before recording processing. These measures reduce lost-event risk after the outbox transaction, but they do not provide end-to-end exactly-once delivery. Validate each stage separately.
 
 ### Incident status transition
 
-1. UI sends `PATCH /api/incidents/{id}` with a constrained status.
-2. API updates the incident record.
-3. API creates an `incident.status_changed` ledger event and attempts broker publication.
-4. User inspects the state and event result independently.
+1. UI sends `PATCH /api/incidents/{incident_id}` with a constrained status.
+2. API updates and commits the incident record.
+3. The event recorder records the `incident.status_changed` ledger row and outbox envelope in a separate transaction, then attempts fast-path broker publication.
+4. User inspects the incident state, event record, outbox status and worker processing evidence independently.
 
 ### Asynchronous broker flow
 
