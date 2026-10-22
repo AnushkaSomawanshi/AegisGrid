@@ -498,7 +498,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 if other == source:
                     ch["status"] = "closed"
                     ch["started_at_step"] = None
-                    ch["closed_at_step"] = len(trace)
+                    ch["closed_at_step"] = len(trace) - 1
                     add("channel.recording.closed", process=target, channel=ch["channel"], captured_messages=0,
                         detail="First marker arrived on this incoming channel; its recorded channel state is empty.")
                 else:
