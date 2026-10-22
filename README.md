@@ -233,6 +233,10 @@ Remaining improvements include:
 
 AegisGrid is a software engineering demonstration. Do not use it for real emergency coordination. Protocol traces and prepopulated chart data are synthetic; runtime health or scaling conclusions should be supported by actual command output and recorded measurements.
 
+## PC startup and release acceptance
+
+For the complete first-run checklist, Windows PowerShell alternatives, Docker Compose startup, incident/resource/experiment verification, broker-to-worker evidence, optional Kubernetes deployment, recovery/scaling checks, troubleshooting and an evidence matrix, see [PC Setup and Release Acceptance](docs/PC_SETUP_AND_ACCEPTANCE.md). This runbook deliberately labels commands that still need to be run on the target PC or a real development cluster; it does not mark them passed based on documentation alone.
+
 ## Detailed implementation and demonstration
 
 The current repository includes persisted resource inventory/reservations and a stepwise experiment workbench. The following guides define how to inspect and verify these capabilities:

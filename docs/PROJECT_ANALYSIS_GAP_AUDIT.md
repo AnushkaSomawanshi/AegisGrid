@@ -6,68 +6,50 @@
 
 ## Executive result
 
-The repository has a useful foundation and the GitHub Actions workflow on `main` has passed its backend and frontend jobs. It is **not yet compliant with the complete project specification**. The current FastAPI API surface contains basic incident create/list/status update, event ledger/demo event, overview, health, static concept endpoints and a basic WebSocket pong endpoint. The React app has eight navigation pages. It does not yet implement a resource-management API, dedicated interactive state machines for each lab, beacon service, incident-causality forensics, recorded experiment reports, or live Docker/Kubernetes observation through a backend integration.
+The repository has advanced beyond the initial audit snapshot. The current source includes persisted resource and reservation endpoints, persisted experiment runs, event/outbox recording, an outbox dispatcher, an independently running RabbitMQ worker, event-ID deduplication, a richer React dashboard, a load-probe script, Kubernetes manifests, CI checks, and deployment runbooks. These are source-level findings; they do not by themselves prove a clean local deployment or a real Kubernetes cluster rollout.
 
-A green TypeScript build and backend unit tests do not prove that the entire distributed application is deployed, that RabbitMQ messages are consumed exactly once, that Kubernetes scaling was exercised, or that the required labs are interactive.
+The purpose of this document is to track the difference between code/configuration, automated CI evidence, a successful local PC run, and actual Kubernetes runtime evidence. Do not mark the project fully accepted until the corresponding gates below have been executed and recorded.
 
 ## Source-of-truth requirements
 
-The detailed specification requires the following architecture:
-- **Emergency Command Centre:** incidents, field units, hospitals/resources, map layers, assignment, live operational status and activity feed.
-- **Distributed Systems Laboratory:** a dedicated screen for every algorithm, common execution controls, process topology, event traces, computed result and invariants.
-- **Infrastructure and Reliability Centre:** real Docker/Kubernetes state, scaling, controlled faults, health, retries, recovery timelines and measured experiments.
+The intended project consists of:
+- **Emergency Command Centre:** incidents, resources/facilities, reservation workflows and activity/event views.
+- **Distributed Systems Laboratory:** dedicated educational demonstrations, scenario controls, execution traces, computed results and documented invariants.
+- **Infrastructure and Reliability Centre:** practical Docker/Kubernetes operations, scaling and recovery runbooks, health checks, and measured experiments.
 
-Each lab is complete only when it has (1) theory and assumptions, (2) interactive execution, (3) backend state-transition logic, (4) verified results/tests, and (5) retrievable evidence.
+A source file or UI element is not, by itself, proof that the user-facing workflow or deployment succeeds. Each requirement needs an implemented path, appropriate tests, a repeatable demonstration and evidence. Educational traces must be labelled as simulations rather than live protocol activity.
 
-## Implementation status by requirement
+## Current implementation status
 
 Status meanings:
-- **FOUNDATION:** underlying code exists but the full requested behavior is not present.
-- **PARTIAL:** some core behavior exists, but the detailed report's acceptance criteria are not met.
-- **MISSING:** no corresponding end-to-end implementation was found in the current source review.
-- **UNVERIFIED:** needs actual Docker/Kubernetes runtime execution and collected evidence.
+- **IMPLEMENTED — SOURCE:** related code or route exists; runtime still needs verification.
+- **PARTIAL:** meaningful behavior exists, but broader acceptance criteria remain unmet.
+- **SIMULATION:** deterministic teaching model, not live distributed state.
+- **UNVERIFIED:** requires current CI evidence or an actual local/cluster run.
+- **FUTURE HARDENING:** current baseline exists but production-style safeguards remain.
 
-| Requirement | Status | Evidence / gap |
+| Requirement | Current status | Evidence / remaining gate |
 |---|---|---|
-| Dashboard shell, metrics, navigation and responsive styling | FOUNDATION | `frontend/src/App.tsx` and `styles.css` provide command centre, incidents, events, labs, topology, scale plan, runtime instructions and docs. Some chart/sample values are illustrative and must remain labelled. |
-| Map-led command centre and layers | MISSING | Current React code does not integrate a map library or geographic marker/layer data. A textual map mention or visual reference is not a working map. |
-| Field units, hospitals and resource inventory | MISSING | No resource/hospital/unit database models or `/api/resources` endpoints. |
-| Reservations and shared-resource ownership | MISSING | No durable reservation state, competing requests, acquire/release protocol or ownership invariant. |
-| Persistent incidents | PARTIAL | SQLAlchemy incident model and REST routes exist; update is limited to status, and lifecycle/audit semantics need integration tests. |
-| Incident-to-broker-to-consumer trace | PARTIAL | Publisher and consumer exist. Dashboard does not show a correlated per-stage request flow; database commit and broker publish are not atomic; consumer has no idempotency key or dead-letter/backoff policy. |
-| Persistent event ledger | PARTIAL | Basic events stored in `event_records`; no correlation/causation IDs or experiment linkage. |
-| Clock synchronization / Berkeley model | PARTIAL | Deterministic offset calculation only; missing per-node editing, unavailable-node UI action, step execution, before/after scenario comparison, persisted runs and tests. |
-| Lamport clock simulator | PARTIAL | Fixed trace; no full process-lane event machine, send/receive controls, pause/step/reset state or causal-order assertions. |
-| Global snapshot | PARTIAL | Fixed process/channel-state sample; no marker execution engine or consistency checker/inconsistent-cut experiment. |
-| Vector clocks | PARTIAL | Fixed vector samples; no incremental vector merge, event creation interface or causal graph. |
-| Leader election | PARTIAL | Fixed Bully model; no interactive failure/election state machine or recorded protocol-message sequence. |
-| Distributed mutual exclusion | PARTIAL | Fixed request ordering; no complete REQUEST/REPLY/deferred-reply execution, real resource ownership history or automated single-owner safety test. |
-| Beacon protocol | MISSING | Generic synthetic missed-heartbeat example only; no dedicated beacon API, configurable heartbeat/timeout, pause/resume, history or recovery events. |
-| RabbitMQ messaging lab | PARTIAL | Basic durable queue publish and worker consumer; no queue inspector API, delivery/retry history, idempotency, bounded retries/dead-letter evidence or end-to-end tests. |
-| Stream / live telemetry lab | PARTIAL | WebSocket accepts text and returns pong; no telemetry source, sequence numbers, gap detection, reconnect/backoff, stream history or metrics. |
-| Happened-before / incident forensics | MISSING | Event ledger is not a causal graph; there is no `/api/forensics`, event correlation graph, causal-path explorer or report export. |
-| Experiments and evidence registry | MISSING | Scaling page is a planning aid with synthetic curve; no persisted experiment runs, baseline/scaled comparison records or exportable measurements. |
-| Docker Compose | FOUNDATION | Compose describes frontend, API, worker, Postgres, RabbitMQ; complete runtime boot/use has not been evidenced by this audit. |
-| Docker operations console | MISSING | Current diagnostics page provides commands to run manually, not live container state/log/restart inspection via a backend adapter. |
-| Kubernetes manifest | FOUNDATION | Namespace, deployments, services, Postgres PVC and probes exist. This does not prove a cluster deployment works. |
-| Kubernetes operations console | MISSING | UI has kubectl instructions, not live namespace/context, nodes, pods, replicas, restart counts, recent Kubernetes events or log retrieval. |
-| Self-healing experiment | UNVERIFIED / MISSING UI | Runbook mentions Pod deletion; there is no controlled orchestration action API or recorded recovery experiment result. No live cluster test is claimed. |
-| Real scalability measurement | MISSING | Planner chart is explicitly synthetic. No workload runner or saved measurements of requests, success/error counts, throughput, latency or CPU/memory. |
-| Fault experiment workbench | MISSING | No end-to-end scenarios for consumer outage/backlog/recovery, timeout/retry, duplicate message or container/Pod replacement with recovery evidence. |
-| Automated verification | PARTIAL | Basic API tests cover health, incident operations, static lab routes and demo ledger. Dedicated algorithm invariants, broker-worker integration, persistence across process restart, resource safety, and scaling/fault tests are absent. |
-| Security / runtime safeguards | PARTIAL | Development secret placeholders are called out. Authentication/authorization and guarded cluster-operation endpoints are absent; infrastructure controls must not be exposed to the browser without a narrow backend permission boundary. |
-
-## Repository evidence inspected
-
-- `services/api/app/main.py`: routes for `/`, `/health/live`, `/health/ready`, `/api/overview`, `/api/incidents` GET/POST, `/api/incidents/{id}` PATCH, `/api/events`, `/api/events/demo`, `/api/concepts`, `/api/labs/{lab_id}`, `/ws/events`.
-- `services/api/app/labs.py`: deterministic functions for physical clock, Lamport, snapshot, vector, Bully, mutual exclusion, heartbeat failure example, stream trace, and concepts list.
-- `services/api/app/broker.py`: RabbitMQ publication helper; publishes persistent message but lacks publisher confirms / outbox / idempotency guarantees.
-- `services/api/app/worker.py`: separate consumer and worker ledger rows; requeues exceptions, but has no message-ID deduplication or bounded dead-letter policy.
-- `services/api/tests/test_api.py`: basic endpoint tests; not full protocol/communication/infrastructure acceptance coverage.
-- `frontend/src/App.tsx`: eight pages and fixed lab-fallback data; lab page retrieves a fixed trace rather than running a protocol state machine; scale page labels its curve synthetic; runtime page generates command snippets rather than querying host/cluster.
-- `docker-compose.yml`: five services (frontend, API, worker, PostgreSQL, RabbitMQ) with local health dependencies.
-- `infrastructure/kubernetes/app-stack.yaml`: namespace-scoped app workload resources and Postgres PVC; development secret placeholders. Actual cluster application is not evidenced.
-- GitHub Actions run checked during this audit: backend and frontend jobs concluded success. This is a build/test signal only.
+| Dashboard shell and responsive UI | IMPLEMENTED — SOURCE | Run frontend build and verify the dashboard in a browser against a running stack. |
+| Incident create/list/status workflow | IMPLEMENTED — SOURCE | Exercise endpoints and verify persisted state. |
+| Resource inventory and reservation workflow | IMPLEMENTED — SOURCE | Verify demo seed, create, reserve, conflict and release paths; confirm persisted state. |
+| Event ledger and outbox | IMPLEMENTED — SOURCE / PARTIAL | Event plus outbox envelope are recorded together; incident persistence occurs in a separate earlier transaction. Test failure boundaries. |
+| Independent outbox dispatcher and RabbitMQ worker | IMPLEMENTED — SOURCE / UNVERIFIED RUNTIME | Verify a unique event progresses to a persisted worker-processing record. |
+| Worker event-ID deduplication | IMPLEMENTED — SOURCE / FUTURE HARDENING | Do not promise end-to-end exactly-once; bounded retry and poison-message dead-letter behavior remain hardening work. |
+| Persisted experiment runs and supported controls | IMPLEMENTED — SOURCE | Test create/inspect/step/reset and other documented supported actions, including trace export where provided. |
+| Physical clock / Berkeley-style lab | SIMULATION | Synthetic clock offsets and corrections; does not alter host clocks or contact NTP. |
+| Lamport and vector clock labs | SIMULATION / PARTIAL | Educational traces with dedicated studio behavior; not live instrumentation of service messages. Verify modeled invariants. |
+| Global snapshot lab | SIMULATION / PARTIAL | Models process/channel recording and trace order; does not snapshot real Docker/Kubernetes state. |
+| Bully election and mutual exclusion labs | SIMULATION / PARTIAL | Educational protocol state/trace, not a real production coordinator or distributed lock service. |
+| Heartbeat/beacon failure detection | SIMULATION / PARTIAL | Simulated missed heartbeats/timeouts; not OS/container liveness observation. |
+| Messaging and WebSocket/stream labs | PARTIAL | RabbitMQ path is part of the running application. WebSocket transport remains a minimal demonstration, not a global production telemetry stream. |
+| Incident forensics | PARTIAL | Endpoint provides a chronological forensic view; complete causal graphs need stronger correlation/causation metadata. |
+| Resource map | IMPLEMENTED — SOURCE / DEMO DATA | Seeded coordinates are examples, not live GPS. |
+| Docker Compose | IMPLEMENTED — CONFIGURATION / UNVERIFIED PC RUN | Six services, health dependencies and named PostgreSQL volume are declared. Must be started and checked on the target PC. |
+| Kubernetes profiles | IMPLEMENTED — CONFIGURATION / UNVERIFIED CLUSTER RUN | Two separate profiles exist. Apply one profile only and record Pods, PVC, endpoints, scaling and recovery from a real development cluster. |
+| Live Docker/Kubernetes operations console | NOT CLAIMED | The operational workflow is runbook/CLI-oriented; do not represent it as a remote runtime control API. |
+| Actual scalability/performance conclusions | UNVERIFIED | Use a fixed workload, repeated trials and raw measurement outputs. Synthetic dashboard charts are not measurements. |
+| CI | CONFIGURED | Workflow defines backend tests, frontend build, manifest checks and Compose smoke test. Inspect Actions for the exact commit under evaluation. |
 
 ## Required target UI (source specification)
 
