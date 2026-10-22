@@ -45,35 +45,23 @@
   background: transparent !important;
   font-family: inherit;
 }
+/* Render the supplied reference artwork above the Leaflet canvas but below live UI overlays.
+   The PNG is the preferred exact reference asset; the checked-in SVG remains a fallback. */
 .ecc-leaflet-map::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 150;
   pointer-events: none;
-  background-color: #0a1b2a;
+  background-color: #061426;
   background-image:
-    linear-gradient(28deg, transparent 0 47%, #123d4b 47.2% 48.1%, #0b2938 48.3% 49.4%, transparent 49.6%),
-    linear-gradient(112deg, transparent 0 43%, #102f40 43.2% 44%, #0c2536 44.2% 45.3%, transparent 45.5%),
-    linear-gradient(0deg, transparent 0 24%, #1b3442 24.2% 24.7%, transparent 24.9% 66%, #1b3442 66.2% 66.7%, transparent 66.9%),
-    linear-gradient(90deg, transparent 0 18%, #1b3442 18.2% 18.7%, transparent 18.9% 37%, #1b3442 37.2% 37.7%, transparent 37.9% 73%, #1b3442 73.2% 73.7%, transparent 73.9%),
-    repeating-linear-gradient(0deg, transparent 0 43px, #193244 44px, transparent 46px 88px),
-    repeating-linear-gradient(90deg, transparent 0 51px, #193244 52px, transparent 54px 102px),
-    radial-gradient(ellipse at 50% 50%, #163c4a 0, #0e2a3b 42%, #091b2a 78%);
-  background-size: 100% 100%;
+    url("/assets/aegisgrid-operational-map.png"),
+    url("/assets/aegisgrid-operational-map.svg");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
 }
-.ecc-leaflet-map::after {
-  content: "";
-  position: absolute;
-  inset: -20% -10%;
-  z-index: 151;
-  pointer-events: none;
-  opacity: .85;
-  background:
-    linear-gradient(153deg, transparent 0 43%, #17617a 43.2% 44.4%, #0d344b 44.6% 46%, transparent 46.2%),
-    linear-gradient(153deg, transparent 0 44%, #36b9d5 44.15% 44.35%, transparent 44.5%);
-  clip-path: polygon(0 48%, 18% 42%, 32% 46%, 48% 37%, 61% 43%, 77% 31%, 100% 34%, 100% 48%, 78% 44%, 62% 56%, 48% 50%, 31% 59%, 17% 54%, 0 61%);
-}
+.ecc-leaflet-map::after { display: none !important; }
 .ecc-leaflet-map .leaflet-overlay-pane,
 .ecc-leaflet-map .leaflet-marker-pane,
 .ecc-leaflet-map .leaflet-tooltip-pane,
