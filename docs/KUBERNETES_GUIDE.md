@@ -1,7 +1,16 @@
 # Kubernetes Guide
 
 ## Objective
-Run the actual AegisGrid frontend, API, worker, PostgreSQL and RabbitMQ workloads in the dedicated `aegisgrid` namespace. The manifest uses Deployments and Services; PostgreSQL has a persistent volume claim. This is a learning deployment, not a hardened production topology.
+Run the actual AegisGrid frontend, API, worker, PostgreSQL and RabbitMQ workloads in the dedicated `aegisgrid` namespace. The main manifest uses Deployments and Services; PostgreSQL has a persistent volume claim. This is a learning deployment, not a hardened production topology.
+
+## Choose one Kubernetes profile
+
+The repository currently maintains two distinct deployment profiles:
+
+- **Main application-stack profile:** `infrastructure/kubernetes/namespace.yaml` and `infrastructure/kubernetes/app-stack.yaml`; optional API autoscaling is in `infrastructure/kubernetes/api-hpa.yaml`.
+- **Laptop-local Kustomize profile:** `deploy/kubernetes/kustomization.yaml`, which references its own resource files and uses a PostgreSQL StatefulSet.
+
+These are separate manifests, not additive overlays. For the walkthrough below, use the main application-stack profile unless you intentionally choose Kustomize. Do not apply both profiles to the same namespace as if they were one configuration; overlapping resource names and differing database workload definitions can produce confusing results. Keep a record of which profile you deployed. The repository's static validator checks the structure of both profiles but does not prove either one works in a live cluster.
 
 ## Preflight
 Requirements:
@@ -42,7 +51,8 @@ kubectl get deployments,pods,services,pvc -n aegisgrid
 kubectl rollout status deployment/aegisgrid-api -n aegisgrid
 kubectl rollout status deployment/aegisgrid-frontend -n aegisgrid
 kubectl logs deployment/aegisgrid-api -n aegisgrid --tail=100
-kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100\nkubectl logs deployment/aegisgrid-outbox-dispatcher -n aegisgrid --tail=100
+kubectl logs deployment/aegisgrid-worker -n aegisgrid --tail=100
+kubectl logs deployment/aegisgrid-outbox-dispatcher -n aegisgrid --tail=100
 ```
 
 The frontend NodePort is 30080. The API Service is internal on port 8000. Accessing the dashboard should use the node address and NodePort supported by your local cluster.
