@@ -7,7 +7,7 @@ import {
   Network, Play, Plus, Radio, RefreshCw, Search, Server, Shield, ShieldCheck,
   Siren, Terminal, Workflow, X, Zap
 } from "lucide-react";
-import { ExperimentWorkbench, ForensicsConsole, MessagingConsole, ResourceCenter, StreamMonitor } from "./AdvancedPanels";
+import { ExperimentWorkbench, ForensicsConsole, ResourceCenter, StreamMonitor } from "./AdvancedPanels";
 import { MutualExclusionStudio } from "./MutualExclusionStudio";
 import { BeaconProtocolControlRoom } from "./BeaconProtocolControlRoom";
 import { GlobalSnapshotDemo } from "./GlobalSnapshotDemo";
