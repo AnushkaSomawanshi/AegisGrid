@@ -462,3 +462,41 @@ The backend `_trace_for("beacon", parameters)` model already produces determinis
 9. Run frontend production build, backend tests, and Docker Compose smoke tests before merging.
 
 **Validation status:** changes were authored through the GitHub repository API. A local frontend build and backend test execution were not available during authoring; merge only after CI and reviewer checks pass.
+
+
+## Communication Control Room — communication chapter workspace
+
+The Messaging navigation item now opens a dedicated Communication Control Room. It presents the existing message-oriented and stream-oriented experiment studio inside a polished transport catalogue. The Mutual Exclusion and Beacon Protocol Control Rooms remain separate routes and separate demonstrations.
+
+### UI areas
+
+1. **Communication header:** AegisGrid distributed-systems context, incident teaching fixture, and a clear boundary between simulation evidence and runtime evidence.
+2. **Transport catalogue:** separate cards for Remote Procedure Call (RPC), message-oriented communication, stream-oriented communication, P2P messaging and WebRTC. Existing message and stream labs are identified as interactive experiments. RPC, P2P and WebRTC are explicitly marked as not yet verified/implemented as dedicated transports rather than presented as functional demos.
+3. **Existing experiment studio:** reuses the current `CommunicationDemo` component and its persisted experiment endpoints for deterministic messaging and stream traces, step execution, pause/resume/reset and JSON export.
+4. **Runtime evidence note:** explains that deterministic traces do not prove that a user action passed through Docker, RabbitMQ or a live WebSocket. This avoids presenting simulated events as real runtime observations.
+5. **Responsive layout:** transport cards adapt from five columns to tablet and mobile layouts.
+
+### Runtime-backed demonstration target
+
+The intended next stage is to correlate one frontend dispatch action through the actual configured service path: API request/response, database/outbox record, publisher result, broker routing/delivery evidence, worker processing and acknowledgement where available. Each stage needs its own evidence; API success must not be treated as proof of worker processing.
+
+Required instrumentation for that stage includes correlation-ID propagation, structured service logs, and a restricted backend log-evidence endpoint. The browser must not access the Docker socket directly. Until that instrumentation is implemented and verified, the UI labels the existing message/stream labs as deterministic simulations and shows Docker correlation as a requirement rather than claiming live logs.
+
+### Transport-specific correctness requirements
+
+- **RPC:** show the actual invocation and response; label HTTP request-response accurately unless a dedicated RPC protocol such as gRPC is implemented.
+- **Message-oriented:** distinguish created, published, consumed, processed and acknowledged states.
+- **Stream-oriented:** show connection lifecycle and ordered frames/bytes only where a real stream transport exists; simulation traces remain labelled.
+- **P2P:** only claim direct peer communication when an actual peer transport is established; otherwise identify relay/signalling paths accurately.
+- **WebRTC:** keep signalling (SDP/ICE exchange) distinct from the peer data path and report browser connection/data-channel evidence only after implementation.
+
+### Manual validation checklist
+
+1. Open Messaging in the main navigation and verify the Communication Control Room shell and five transport cards.
+2. Confirm message-oriented and stream-oriented experiments still use the existing experiment API and can create, step, pause/resume/reset and export a trace.
+3. Verify that RPC, P2P and WebRTC cards do not claim runtime support until their transport implementations exist.
+4. Verify the existing Stream Telemetry navigation and the Mutual Exclusion and Beacon Protocol pages remain available independently.
+5. Run the frontend production build, backend test suite and Docker Compose smoke tests before merging.
+6. For a later runtime-backed phase, verify correlation IDs across producer, outbox, broker and consumer logs before marking any stage as runtime-verified.
+
+**Validation status:** authored through the GitHub repository API. Local build and test execution were not available in this authoring session; CI and reviewer verification are required.
