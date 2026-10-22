@@ -21,7 +21,7 @@ const demoPositions:[number,number][]=[[28.6218,77.2087],[28.6281,77.1984],[28.6
 const demoRoute:[number,number][]=[[28.6108,77.1957],[28.6142,77.2011],[28.6167,77.2082],[28.6218,77.2087]];
 const vehicleIcon=(kind:string)=>divIcon({className:"ecc-vehicle-marker",html:`<span class="ecc-vehicle-glyph">${kind==="AMB"?"✚":kind==="FIRE"?"✹":"🚙"}</span><small>${kind}</small>`,iconSize:[40,34],iconAnchor:[20,17]});
 const demoIncidentIcon=(severity:string)=>divIcon({className:"ecc-demo-incident-marker",html:`<span class="ecc-demo-pulse sev-${severity}"></span>`,iconSize:[24,24],iconAnchor:[12,12]});
-export function CommandCenter({overview,incidents,events,services,apiState,refreshing,onRefresh,onCreate,onEmit,onNavigate}:Props){
+export function CommandCenter({overview,incidents,events,apiState,refreshing,onRefresh,onCreate,onEmit,onNavigate}:Props){
  const [mode,setMode]=useState("All modes");const [urgency,setUrgency]=useState("All urgency");const [status,setStatus]=useState("All status");const [query,setQuery]=useState("");const [selectedId,setSelectedId]=useState<number|null>(null);const [layerSet,setLayerSet]=useState({incidents:true,services:true,clusters:true,events:false});const [tab,setTab]=useState("Triage");const [mapExpanded,setMapExpanded]=useState(false);
  const dashboardIncidents=useMemo(()=>incidents.length>=4?incidents: [...incidents,...demoIncidents.filter(d=>!incidents.some(i=>i.title.toLowerCase()===d.title.toLowerCase()))],[incidents]);
  const visible=useMemo(()=>dashboardIncidents.filter(i=>(mode==="All modes"||i.category.toLowerCase()===mode.toLowerCase())&&(urgency==="All urgency"||i.severity===urgency.toLowerCase())&&(status==="All status"||i.status===status.toLowerCase())&&(!query||[i.title,i.location,i.description,String(i.id)].join(" ").toLowerCase().includes(query.toLowerCase()))),[dashboardIncidents,mode,urgency,status,query]);
@@ -29,7 +29,6 @@ export function CommandCenter({overview,incidents,events,services,apiState,refre
  const validCoordinates=useMemo(()=>incidents.flatMap(i=>{const c=i as Incident & {latitude?:number|null;longitude?:number|null;lat?:number|null;lng?:number|null;coordinates?:{latitude?:number;longitude?:number;lat?:number;lng?:number}|null};const lat=c.latitude??c.lat??c.coordinates?.latitude??c.coordinates?.lat;const lng=c.longitude??c.lng??c.coordinates?.longitude??c.coordinates?.lng;return typeof lat==="number"&&typeof lng==="number"&&Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180?[{id:i.id,lat,lng}]:[]}),[incidents]);
  const mapCenter: [number,number]=validCoordinates.length?[validCoordinates[0].lat,validCoordinates[0].lng]:[28.6175,77.2080];
  const mapZoom=validCoordinates.length===1?14:validCoordinates.length>1?12:14;
- const m=overview?.metrics;
  const observed=apiState==="connected";
  const layers=[{key:"incidents" as const,label:"Incidents",desc:"Cases and urgency"},{key:"services" as const,label:"Responders",desc:"Resource inventory"},{key:"clusters" as const,label:"Service clusters",desc:"Application components"},{key:"events" as const,label:"Event activity",desc:"Recent event sources"}];
  return <div className="ecc-shell">
