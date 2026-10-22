@@ -491,3 +491,35 @@ Manual validation:
 6. Verify incident registration, refresh, event ledger, service topology, Mutual Exclusion and Beacon Protocol navigation still work.
 
 **Evidence boundary:** map tiles are real geographic tiles; incident positions and response routes are shown only when backed by coordinate/route data. This UI change does not itself add coordinates or routing data to the API.
+
+
+## Vector Clock Execution Studio — detailed causality workbench
+
+The Vector Clock Studio uses the persisted `/api/experiments` run/step controls and deterministic backend-generated trace. Its purpose is to make each vector transition and event relationship inspectable, not to present unexplained timestamp cards.
+
+### Demonstration flow
+- Select Basic message exchange, Independent processes, Multi-hop causality, or Concurrent updates.
+- Start a new run and execute one event at a time. Process clocks are reconstructed from executed events only.
+- For each selected event, inspect its prior vector, incoming message vector (for receive events), component-wise maximum, incremented process component, resulting vector and causal predecessors.
+- Inspect the process lanes and message dependency rows. A message is not shown as received until its receive event has executed.
+- Compare two executed events. The comparison is based on component-wise vector ordering; incomparable vectors are concurrent. Equal vectors do not imply a strict happens-before relationship.
+- In the Concurrent updates scenario, choose dispatch-first or inventory-first to reorder an independent event while retaining the send/receive dependency. Compare the event vectors after execution.
+- Export JSON for the persisted run, executed trace, visible causal edges and pairwise comparisons.
+
+### Correctness and evidence boundary
+- Vector component order is fixed as `[P1, P2, P3]`.
+- A local or send event increments only its own process component. A send attaches the resulting vector to the message.
+- A receive event computes the component-wise maximum of the receiver's current vector and the message vector, then increments the receiver's component.
+- The causal map and comparison workbench use the trace returned by the experiment API. They are educational deterministic simulation, not evidence of live RabbitMQ, Docker, or worker message traffic.
+- Event counts and comparisons reflect the executed prefix. Selecting a future event in the ledger does not execute it.
+- Reset, pause, resume and run-to-completion remain backed by the existing experiment API.
+
+### Manual verification
+1. Run `npm run build` in `frontend`.
+2. Start Basic message exchange and verify a receive event shows `max(local, message)` followed by the receiver increment.
+3. Run Multi-hop causality and verify the P1 component propagates through P2 to P3.
+4. Run Independent processes and compare events whose vectors are incomparable.
+5. Run Concurrent updates twice, selecting each independent-event ordering, and verify the independent event order changes without violating message send-before-receive.
+6. Verify metrics count executed events only; reset and replay.
+7. Export JSON and verify the exported vectors and causal edges match the displayed run.
+8. Verify Lamport clocks, physical clock synchronization, Mutual Exclusion and Beacon Protocol remain separate routes/labs.
