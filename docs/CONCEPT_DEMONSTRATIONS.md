@@ -462,3 +462,32 @@ The backend `_trace_for("beacon", parameters)` model already produces determinis
 9. Run frontend production build, backend tests, and Docker Compose smoke tests before merging.
 
 **Validation status:** changes were authored through the GitHub repository API. A local frontend build and backend test execution were not available during authoring; merge only after CI and reviewer checks pass.
+
+
+## Command Centre — geographic operations workspace refinement
+
+The command-centre dashboard now uses a three-area operational layout: response queue, geographic map, and selected-incident workspace. The centre map receives more width and a defined minimum height so it remains the visual anchor rather than collapsing into a narrow schematic panel.
+
+### Geographic map and evidence boundaries
+
+- Uses Leaflet with OpenStreetMap tiles for an actual geographic basemap, including pan and zoom controls.
+- Incident markers are only drawn when the incident API record supplies valid latitude/longitude through `latitude/longitude`, `lat/lng`, or a `coordinates` object.
+- Clicking a coordinate-backed marker selects the corresponding incident in the details workspace.
+- If no incident coordinates exist, the map remains a real basemap and displays an explicit empty-state message. It does not geocode descriptive location text, fabricate pins, invent routes, or claim that schematic points are geographic.
+- OpenStreetMap attribution remains visible on the map.
+- The queue and incident detail panes retain API-backed incident fields, status, category, created time and recorded event evidence.
+- The layout adapts at tablet and mobile breakpoints instead of forcing three narrow columns.
+
+### Runtime and validation notes
+
+The geographic tiles are fetched from OpenStreetMap at runtime, so the map requires network access. Incident coordinates are not inferred from the browser location. If the current API schema does not return coordinates, adding validated coordinates to incident records is a separate backend/data-model task before incident pins can appear.
+
+Manual validation:
+1. Run `npm run build` in `frontend`.
+2. Open Command Centre at desktop, tablet and mobile widths; verify the map stays large and queue/details do not overlap.
+3. Pan and zoom the OpenStreetMap layer; verify attribution is visible.
+4. With an incident record that includes valid coordinates, verify a marker appears and selecting it opens the matching incident details.
+5. With records that have no coordinates, verify the explicit empty state appears and no false marker is shown.
+6. Verify incident registration, refresh, event ledger, service topology, Mutual Exclusion and Beacon Protocol navigation still work.
+
+**Evidence boundary:** map tiles are real geographic tiles; incident positions and response routes are shown only when backed by coordinate/route data. This UI change does not itself add coordinates or routing data to the API.
