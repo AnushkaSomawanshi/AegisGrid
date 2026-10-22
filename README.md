@@ -139,32 +139,48 @@ PostgreSQL and RabbitMQ are configured as singleton stateful workloads in these 
 
 ```text
 AegisGrid/
-├── frontend/                         # React + TypeScript operations dashboard
-│   ├── src/App.tsx                   # Pages, concept labs and UI state
-│   ├── src/styles.css                # Responsive visual system
-│   ├── Dockerfile                    # Multi-stage image
-│   └── nginx.conf                    # API/WebSocket proxy + SPA fallback
+├── README.md
+├── docker-compose.yml                 # Six-service local development stack
+├── .env.example                       # Development-only example values
+├── .github/workflows/ci.yml           # Backend, frontend, manifest and Compose smoke checks
+├── frontend/
+│   ├── Dockerfile                     # Vite build stage + Nginx runtime
+│   ├── nginx.conf                     # SPA fallback, API proxy and WebSocket proxy
+│   └── src/                           # React/TypeScript dashboard and concept studios
 ├── services/api/
-│   ├── app/main.py                   # FastAPI gateway and HTTP/WebSocket routes
-│   ├── app/db.py                     # SQLAlchemy incident/event models
-│   ├── app/broker.py                 # RabbitMQ publisher
-│   ├── app/worker.py                 # Independent consumer process
-│   ├── app/labs.py                   # Distributed-systems teaching models
-│   ├── tests/test_api.py             # API test cases
-│   └── Dockerfile
+│   ├── Dockerfile                     # Shared Python image for API and background processes
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── main.py                   # FastAPI routes and incident/event workflow
+│   │   ├── db.py                     # SQLAlchemy models and sessions
+│   │   ├── broker.py                 # RabbitMQ publication
+│   │   ├── outbox_dispatcher.py      # Pending outbox publication/retry loop
+│   │   ├── worker.py                 # Independent consumer and processing ledger
+│   │   ├── labs.py                   # Distributed-systems teaching models
+│   │   └── advanced.py               # Advanced experiment APIs
+│   └── tests/
+│       └── test_api.py
 ├── infrastructure/kubernetes/
 │   ├── namespace.yaml
-│   └── app-stack.yaml                # Frontend, API, worker, DB and broker workloads
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── CONCEPT_DEMONSTRATIONS.md
-│   ├── DOCKER_GUIDE.md
-│   ├── KUBERNETES_GUIDE.md
-│   ├── EXPERIMENTS.md
-│   └── DEMO_SCRIPT.md
-├── docker-compose.yml
-└── .env.example
+│   ├── app-stack.yaml                # Application, worker, database, broker and PVC
+│   └── api-hpa.yaml                  # Optional; requires metrics-server
+├── deploy/kubernetes/
+│   └── kustomization.yaml            # Separate laptop-local Kustomize profile + resources
+├── scripts/
+│   ├── validate_manifests.py         # Static structural checks (not a cluster deployment test)
+│   └── k8s_recovery_probe.py         # Guarded replacement-Pod readiness measurement
+└── docs/
+    ├── ARCHITECTURE.md
+    ├── CONCEPT_DEMONSTRATIONS.md
+    ├── DEMO_SCRIPT.md
+    ├── DOCKER_GUIDE.md
+    ├── KUBERNETES_GUIDE.md
+    ├── DOCKER_KUBERNETES_DEMONSTRATION.md
+    ├── EXPERIMENTS.md
+    └── PROJECT_ANALYSIS_GAP_AUDIT.md
 ```
+
+**Deployment-profile note:** `infrastructure/kubernetes/` is the documented application-stack path. `deploy/kubernetes/` is a separate Kustomize profile for laptop-local clusters, not an overlay of the first path. Use one profile for a demonstration, record which profile was applied, and keep both aligned until they can be safely consolidated. Do not assume that applying one profile also applies the other.
 
 ## Concept modules
 
@@ -203,13 +219,15 @@ Run the checks in the target environment before describing them as passing. This
 
 ## Engineering limitations and next steps
 
-The current academic baseline keeps service boundaries understandable and avoids claiming production-grade delivery guarantees. Important next improvements:
-- Transactional outbox to coordinate database changes with broker publication.
-- Idempotent consumer and retry limits/dead-letter queue.
-- Database migration tooling, event schema versioning and structured JSON payload columns.
-- Authentication/authorization for incident operations.
-- Metrics, structured logs, tracing and repeatable load-test harness.
-- Secure secret management, TLS, NetworkPolicies and appropriate persistent/HA designs for PostgreSQL/RabbitMQ.
+The current academic baseline includes an event/outbox recording path, an outbox dispatcher, event-ID deduplication in the worker, backend tests, CI, manifest validation and a Docker Compose smoke test. These mechanisms improve observability and recovery but do **not** provide end-to-end exactly-once delivery or production-grade availability.
+
+Remaining improvements include:
+- Verify publisher confirms and define bounded retry/dead-letter behavior for poison messages.
+- Add database migration tooling, versioned event schemas and consider structured JSON/JSONB payload columns.
+- Add authentication/authorization and rate limiting for incident/resource operations.
+- Extend structured logs, metrics, trace/correlation IDs and repeatable load tests across API, outbox, broker and worker.
+- Use secure secret management, TLS, NetworkPolicies, least-privilege service accounts and appropriate persistent/high-availability designs for PostgreSQL/RabbitMQ.
+- Validate Kubernetes deployment, recovery and scaling in a real development cluster; do not infer runtime success from static manifests.
 
 ## Academic and safety note
 
@@ -217,7 +235,7 @@ AegisGrid is a software engineering demonstration. Do not use it for real emerge
 
 ## Detailed implementation and demonstration
 
-The current implementation branch adds persisted resource inventory/reservations and a stepwise experiment workbench. See:
+The current repository includes persisted resource inventory/reservations and a stepwise experiment workbench. The following guides define how to inspect and verify these capabilities:
 - [Project Analysis Gap Audit](docs/PROJECT_ANALYSIS_GAP_AUDIT.md) — requirement-by-requirement gap analysis and acceptance gate.
 - [Docker & Kubernetes Demonstration Runbook](docs/DOCKER_KUBERNETES_DEMONSTRATION.md) — full run sequence for Compose, incident/resource workflow, RabbitMQ worker, Kubernetes rollout/scaling, Pod recovery, and evidence capture.
 - [Scalability and Resilience Experiments](docs/EXPERIMENTS.md) — controlled experiments and measurement requirements.
