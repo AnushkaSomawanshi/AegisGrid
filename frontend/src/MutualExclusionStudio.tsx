@@ -21,7 +21,6 @@ const processInfo = [
   { id: "P2", name: "Recovery controller", role: "Field response · UNIT-7" },
   { id: "P3", name: "Resource allocator", role: "Capacity reservation service" },
 ];
-function pretty(value: unknown) { return typeof value === "string" ? value.replaceAll(".", " · ").replaceAll("-", " ") : JSON.stringify(value); }
 export function MutualExclusionStudio() {
   const [scenario, setScenario] = useState(scenarios[0].id);
   const [run, setRun] = useState<Run | null>(null);
@@ -29,7 +28,6 @@ export function MutualExclusionStudio() {
   const [error, setError] = useState("");
   const [selectedStep, setSelectedStep] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
-  const current = scenarios.find(s => s.id === scenario) || scenarios[0];
   const executed = run?.trace.slice(0, run.current_step) || [];
   const event = selectedStep === null ? executed[executed.length - 1] : executed.find(e => e.step === selectedStep);
   const owner = useMemo(() => {
@@ -103,7 +101,7 @@ export function MutualExclusionStudio() {
     </section>
     <div className="mx-layout">
       <section className="mx-panel mx-topology"><div className="mx-section-title compact"><div><span className="mx-kicker">02 / PROCESS TOPOLOGY</span><h2>Who is competing?</h2></div><span className="mx-pill">3 peers · 1 resource</span></div>
-        <div className="mx-network"><div className="mx-resource-node"><ShieldCheck size={21}/><b>R-01</b><small>Capacity = 1</small><span className={owner ? "occupied" : ""}>{owner ? "OWNED" : "AVAILABLE"}</span></div><div className="mx-process-list">{processInfo.map((p, i) => <div className="mx-process" key={p.id}><div className={owner && String(owner).includes(p.id) ? "mx-process-avatar active" : "mx-process-avatar"}>{p.id}</div><div><b>{p.name}</b><small>{p.role}</small><span>{executed.some(e => String(e.process || e.node || "").includes(p.id)) ? "Participating in trace" : "Awaiting protocol events"}</span></div><ArrowDownRight size={17}/></div>)}</div></div>
+        <div className="mx-network"><div className="mx-resource-node"><ShieldCheck size={21}/><b>R-01</b><small>Capacity = 1</small><span className={owner ? "occupied" : ""}>{owner ? "OWNED" : "AVAILABLE"}</span></div><div className="mx-process-list">{processInfo.map((p) => <div className="mx-process" key={p.id}><div className={owner && String(owner).includes(p.id) ? "mx-process-avatar active" : "mx-process-avatar"}>{p.id}</div><div><b>{p.name}</b><small>{p.role}</small><span>{executed.some(e => String(e.process || e.node || "").includes(p.id)) ? "Participating in trace" : "Awaiting protocol events"}</span></div><ArrowDownRight size={17}/></div>)}</div></div>
         <p className="mx-footnote">Arrows represent conceptual request/reply paths. The event ledger below is authoritative for message direction and ordering.</p>
       </section>
       <section className="mx-panel mx-evidence"><div className="mx-section-title compact"><div><span className="mx-kicker">03 / SAFETY EVIDENCE</span><h2>Protocol invariants</h2></div><ShieldCheck size={20}/></div>
