@@ -50,6 +50,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Validate rendered Compose configuration
+        run: docker compose config --quiet
       - name: Build and start complete Compose stack
         run: docker compose up -d --build
       - name: Wait for API readiness

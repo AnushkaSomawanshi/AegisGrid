@@ -260,3 +260,49 @@ Start Docker Compose as described below, open the dashboard, then:
 ### Detailed Berkeley clock synchronization lab
 
 The Physical Clock Synchronization entry in the Experiment Workbench opens a dedicated Berkeley-style demonstration with per-node offset/drift controls, offline-node timeout simulation, a backend-generated poll/aggregate/correction event trace, a coordinator calculation audit, before/after offset spread, stepwise execution, and JSON evidence export. Read [the detailed demonstration contract and limitations](docs/CONCEPT_DEMONSTRATIONS.md#1-physical-clock-synchronization--detailed-berkeley-style-demonstration). All clock values are synthetic; this is not an NTP client and does not alter host clocks.
+
+
+## Repository audit and release acceptance
+
+Use the [Project Analysis Gap Audit](docs/PROJECT_ANALYSIS_GAP_AUDIT.md) as the requirement-to-evidence matrix. It records the reviewed repository structure, current pull-request snapshot, architecture diagram, deployment profiles, acceptance gates, and validation limitations. It must be updated whenever a deployment profile or core service contract changes.
+
+### Canonical launch paths
+
+- **Docker Compose:** root `docker-compose.yml`; see [Docker Guide](docs/DOCKER_GUIDE.md).
+- **Kubernetes application stack:** `infrastructure/kubernetes/namespace.yaml` and `infrastructure/kubernetes/app-stack.yaml`; see [Kubernetes Guide](docs/KUBERNETES_GUIDE.md). Apply `api-hpa.yaml` only when the cluster has metrics-server and working CPU metrics.
+- **Laptop-local Kustomize profile:** `deploy/kubernetes/kustomization.yaml`. This is a separate deployment profile, not an overlay of the infrastructure manifest path. The profiles must be kept in sync or consolidated in a reviewed change.
+- **End-to-end practical demonstration:** [Docker and Kubernetes Demonstration Runbook](docs/DOCKER_KUBERNETES_DEMONSTRATION.md).
+- **Scalability and recovery experiments:** [Experiments](docs/EXPERIMENTS.md).
+
+### Validation commands
+
+Run these from the repository root:
+
+```bash
+# Validate Compose configuration and build/start the stack.
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+curl -fsS http://localhost:8000/health/ready
+
+# Validate manifest structure (requires Python and PyYAML).
+python -m pip install pyyaml
+python scripts/validate_manifests.py
+
+# Run backend tests and frontend production build.
+python -m pip install -r services/api/requirements.txt
+(cd services/api && pytest -q)
+(cd frontend && npm install && npm run build)
+
+# Inspect the live Kubernetes context before applying anything.
+kubectl config current-context
+kubectl get nodes
+kubectl apply -f infrastructure/kubernetes/namespace.yaml
+kubectl apply -f infrastructure/kubernetes/app-stack.yaml
+kubectl rollout status deployment/aegisgrid-api -n aegisgrid
+kubectl get pods,services,pvc -n aegisgrid
+```
+
+The Kubernetes commands require a configured development cluster and locally available images, a suitable storage class, and replacement of development placeholder credentials. Apply the optional HPA only after checking metrics availability. Do not run recovery experiments against a shared or production cluster.
+
+**Evidence rule:** a successful manifest parse is not a deployment; a healthy API is not proof of message consumption; configured replicas are not proof that replicas became Ready; and a dashboard illustration is not a measured performance result. Mark each acceptance gate complete only after capturing the corresponding test output or runtime evidence. The current validation state is recorded in the gap audit.
