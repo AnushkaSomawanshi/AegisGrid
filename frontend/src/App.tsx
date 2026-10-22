@@ -148,7 +148,7 @@ function App(){
    <header className="topbar"><div className="topbar-left"><button className="icon-btn mobile-only" onClick={()=>setSidebarOpen(true)} aria-label="Open menu"><Menu size={20}/></button><div className="breadcrumbs"><span>AEGISGRID</span><ChevronRight size={14}/><b>{headerTitle.toUpperCase()}</b></div></div><div className="topbar-actions"><div className="date-display"><Clock3 size={14}/>{fmtDate()}</div><button className="icon-btn search-shortcut" onClick={()=>document.getElementById("global-search")?.focus()} aria-label="Search"><Search size={17}/></button><button className="icon-btn notification-btn" onClick={()=>setNotice("You’re all caught up. Notifications are local to this demonstration.")} aria-label="Notifications"><Bell size={17}/><i></i></button><div className="topbar-divider"></div><div className="avatar avatar-small">AG</div></div></header>
    <div className="page-content">
     {notice&&<div className="notice"><CheckCircle2 size={16}/><span>{notice}</span><button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={15}/></button></div>}
-    {page==="command"&&<><ProjectDeliveryHighlights onNavigate={navigate}/><CommandCenter overview={overview} incidents={incidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} /></>}
+    {page==="command"&&<CommandCenter overview={overview} incidents={incidents} events={events} services={services} apiState={apiState} refreshing={refreshing} onRefresh={loadData} onCreate={()=>setIncidentModal(true)} onEmit={emitEvent} onNavigate={navigate} />}
     {page==="resources"&&<ResourceCenter/>}
     {page==="concepts"&&<ConceptsPage onNavigate={navigate}/>}
     {page==="delivery"&&<ProjectDeliveryPage onNavigate={navigate}/>}
@@ -266,18 +266,6 @@ const mergedWorkToday = [
  {pr:22,title:"Beacon Protocol Control Room",area:"Failure detection lab",purpose:"Show how heartbeat loss, delay and recovery affect a detector's suspicion state.",result:"Configurable fault scenarios and detector settings, event-by-event run controls, worker topology, detection evidence and JSON export.",route:"lab-failure",label:"Open heartbeat detection"},
  {pr:21,title:"Critical Resource Control Room",area:"Mutual exclusion lab",purpose:"Make contention for a capacity-one shared resource and protocol safety inspectable.",result:"Resource ownership, process contention, trace execution and safety evidence in a dedicated workspace.",route:"lab-mutex",label:"Open mutual exclusion"}
 ];
-function ProjectDeliveryHighlights({onNavigate}:{onNavigate:(p:string)=>void}){
- return <section className="panel" style={{marginBottom:20,padding:20}}>
-  <div className="section-head"><div><div className="eyebrow">RELEASE OVERVIEW / 22 OCT 2026</div><h2>Today’s merged work, connected to the UI</h2><p>Open the detailed delivery register to see each merged PR’s purpose, what it changed, and where to inspect it.</p></div><BookOpen size={22}/></div>
-  <div className="docs-architecture-cards">
-   <article className="docs-component"><span>01 / OPERATIONS</span><b>Command Centre map</b><p>Real map tiles, incident queue, selected case details and operations controls. Map pins appear only for records with valid coordinates.</p><button className="btn-secondary" onClick={()=>onNavigate("command")}>View command centre <ChevronRight size={14}/></button></article>
-   <article className="docs-component"><span>02 / DISTRIBUTED SYSTEMS</span><b>Interactive protocol studios</b><p>Vector clocks, global snapshots, Bully election, mutual exclusion, heartbeat detection, physical clocks and Lamport clocks.</p><button className="btn-secondary" onClick={()=>onNavigate("concepts")}>Browse concept labs <ChevronRight size={14}/></button></article>
-   <article className="docs-component"><span>03 / RELEASE EVIDENCE</span><b>Setup, architecture and validation</b><p>PC runbook, repository audit, deployment-profile guidance and explicit separation of source checks from runtime evidence.</p><button className="btn-secondary" onClick={()=>onNavigate("delivery")}>Review merged PRs <ChevronRight size={14}/></button></article>
-  </div>
-  <div className="docs-callout"><AlertCircle size={17}/><p><b>Communication Control Room status:</b> PR #23 is still open, not merged. The existing Message/Stream Execution Studio is merged and reachable; the extra five-transport catalogue from PR #23 should not be presented as merged work yet.</p></div>
-  <button className="btn-primary" onClick={()=>onNavigate("delivery")}>Open full merged-work register <ChevronRight size={15}/></button>
- </section>;
-}
 function ProjectDeliveryPage({onNavigate}:{onNavigate:(p:string)=>void}){
  return <><PageIntro eyebrow="PROJECT DELIVERY / MERGE TRACEABILITY" title="Merged work register" subtitle="A detailed, evidence-conscious map of today's merged pull requests: why each change exists, what it adds, and where to inspect the corresponding UI or documentation." actions={<button className="btn-secondary" onClick={()=>onNavigate("command")}>Back to Command Centre</button>}/>
   <div className="docs-callout"><CheckCircle2 size={17}/><p><b>Scope:</b> PRs #21, #22, and #24–#31 are listed as merged today. PR #23 (Communication Control Room) is shown separately as open and is not counted as delivered.</p></div>
