@@ -32,7 +32,7 @@ type Lab = {concept:string;algorithm?:string;note?:string;[key:string]:any};
 
 const nav = [
   {label:"OPERATIONS",items:[{id:"command",name:"Command centre",icon:Activity},{id:"incidents",name:"Incident response",icon:Siren},{id:"resources",name:"Resources & dispatch",icon:Database},{id:"events",name:"Event ledger",icon:GitBranch},{id:"forensics",name:"Incident forensics",icon:Workflow}]},
-  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"messaging",name:"Message-oriented delivery",icon:MessageSquare},{id:"stream",name:"Stream telemetry",icon:Radio},{id:"lab-physical-clock",name:"Clock synchronization",icon:Clock3},{id:"lab-lamport",name:"Lamport logical clocks",icon:GitBranch},{id:"vector-demo",name:"Vector clock execution",icon:GitBranch},{id:"snapshot",name:"Global state capture",icon:Workflow},{id:"election-demo",name:"Leader election",icon:Network},{id:"lab-mutex",name:"Mutual exclusion",icon:ShieldCheck},{id:"lab-failure",name:"Heartbeat suspicion",icon:Activity}]},
+  {label:"DISTRIBUTED RUNTIME",items:[{id:"architecture",name:"Service topology",icon:Network},{id:"lab-messaging",name:"Message-oriented communication",icon:MessageSquare},{id:"lab-stream",name:"Stream-oriented communication",icon:Radio},{id:"lab-physical-clock",name:"Physical clock synchronization",icon:Clock3},{id:"lab-lamport",name:"Lamport logical clocks",icon:GitBranch},{id:"lab-vector",name:"Vector clocks",icon:GitBranch},{id:"lab-snapshot",name:"Global state snapshot",icon:Workflow},{id:"lab-election",name:"Leader election",icon:Network},{id:"lab-mutex",name:"Distributed mutual exclusion",icon:ShieldCheck},{id:"lab-failure",name:"Heartbeat failure detection",icon:Activity}]},
   {label:"INFRASTRUCTURE",items:[{id:"deployment",name:"Docker & Kubernetes",icon:Boxes},{id:"scale",name:"Scaling & resilience",icon:Layers3},{id:"runtime",name:"Runtime diagnostics",icon:Terminal}]}
 ];
 
@@ -153,6 +153,7 @@ function App(){
     {page==="messaging"&&<MessagingConsole/>}
     {page==="stream"&&<StreamMonitor/>}
     {page==="experiments"&&<ExperimentWorkbench/>}
+    {page==="labs"&&selectedLab==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("lab-physical-clock")}/>}
     {page==="labs"&&selectedLab==="mutex"&&<MutualExclusionStudio/>}
     {page==="labs"&&selectedLab==="failure"&&<BeaconProtocolControlRoom/>}
     {page==="snapshot"&&<GlobalSnapshotDemo onBack={()=>navigate("experiments")}/>}
@@ -163,8 +164,8 @@ function App(){
     {page==="incidents"&&<IncidentsPage incidents={visibleIncidents} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onCreate={()=>setIncidentModal(true)} onUpdate={setIncidentStatus}/>}
     {page==="forensics"&&<ForensicsConsole/>}
     {page==="events"&&<EventsPage events={visibleEvents} eventFilter={eventFilter} setEventFilter={setEventFilter} search={search} setSearch={setSearch} expanded={expandedEvent} setExpanded={setExpandedEvent} onEmit={emitEvent}/>}
-    {page==="labs"&&selectedLab==="messaging"&&<CommunicationDemo onBack={()=>navigate("experiments")}/>}
-    {page==="labs"&&selectedLab==="stream"&&<CommunicationDemo onBack={()=>navigate("experiments")}/>}
+    {page==="labs"&&selectedLab==="messaging"&&<CommunicationDemo initialMode="messaging" onBack={()=>navigate("experiments")}/>}
+    {page==="labs"&&selectedLab==="stream"&&<CommunicationDemo initialMode="stream" onBack={()=>navigate("experiments")}/>}
     {page==="labs"&&selectedLab!=="messaging"&&selectedLab!=="stream"&&selectedLab!=="vector"&&selectedLab!=="election"&&selectedLab!=="mutex"&&selectedLab!=="failure"&&<LabsPage selectedLab={selectedLab} activeLab={activeLab} labData={labData} loading={labLoading} onSelect={loadLab} onEmit={emitEvent}/>}
     {page==="architecture"&&<ArchitecturePage services={services} apiState={apiState} onSelect={(name)=>{setSelectedService(name);navigate("runtime");}}/>}
     {page==="scale"&&<ScalePage apiState={apiState} onNavigate={navigate}/>}
