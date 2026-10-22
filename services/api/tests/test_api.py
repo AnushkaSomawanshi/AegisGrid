@@ -361,6 +361,34 @@ def test_snapshot_empty_and_multiple_message_presets():
     assert all(c['status'] == 'closed' for c in multiple['result']['channel_states'])
 
 
+
+
+def test_snapshot_delayed_marker_keeps_channel_recording_open_until_delivery():
+    response = client.post('/api/experiments', json={'lab_id':'snapshot','scenario':'delayed-marker'})
+    assert response.status_code == 201
+    run = response.json()['run']
+    trace = run['trace']
+    delayed = next(e for e in trace if e['event'] == 'marker.delivery.delayed')
+    recorded = next(e for e in trace if e['event'] == 'channel.message_recorded')
+    closed = next(e for e in trace if e['event'] == 'channel.recording.closed' and e['channel'] == 'P2->P3')
+    assert delayed['channel'] == 'P2->P3'
+    assert recorded['step'] < delayed['step'] < closed['step']
+    assert run['result']['consistent_cut'] is True
+    assert all(channel['status'] == 'closed' for channel in run['result']['channel_states'])
+
+
+def test_snapshot_first_marker_closes_its_channel_as_empty():
+    run = client.post('/api/experiments', json={'lab_id':'snapshot','scenario':'empty'}).json()['run']
+    trace = run['trace']
+    first_marker = next(e for e in trace if e['event'] == 'marker.received' and e['channel'] == 'P1->P3')
+    close = next(e for e in trace if e['event'] == 'channel.recording.closed' and e['channel'] == 'P1->P3')
+    assert first_marker['step'] < close['step']
+    assert close['captured_messages'] == 0
+    channel = next(c for c in run['result']['channel_states'] if c['channel'] == 'P1->P3')
+    assert channel['started_at_step'] is None
+    assert channel['closed_at_step'] == first_marker['step']
+    assert run['result']['consistent_cut'] is True
+
 def test_vector_clock_default_trace_calculates_all_vectors():
     response = client.post('/api/experiments', json={'lab_id':'vector','scenario':'basic-causality'})
     assert response.status_code == 201

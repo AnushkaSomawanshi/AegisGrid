@@ -112,6 +112,14 @@ The dedicated Global State Capture Studio is a dark, responsive operations dashb
 - This is a deterministic teaching simulation, not a live snapshot of the API, database, RabbitMQ or Kubernetes.
 - Channel capture is derived from modeled event order; callers do not provide a pre-labelled final in-transit message list.
 
+
+
+### Execution-cursor correctness and delayed markers
+
+The process cards, channel cards, captured-message count, ledgers, assembled snapshot and visible-state export are reconstructed from events up to the persisted execution cursor. The API run stores a planned trace and final result when created; the UI must not mistake that final result object for already-executed events. The JSON export intentionally includes both the persisted run/trace and cursor-derived visible state so readers can distinguish plan from progress.
+
+The delayed-marker preset emits an explicit `marker.delivery.delayed` event while P2 → P3 is still recording. In the event ledger, the in-transit application message must occur after `channel.recording.started` and before the channel's `channel.recording.closed` event. On a process's first marker, the incoming marker channel is recorded as empty and closed immediately. Other incoming channels remain open until their marker arrives. The completion invariant is that every process has recorded local state and every directed channel is closed; the consistency label remains pending in the UI until the cursor reaches the completion event.
+
 ## 4. Vector clocks — execution studio
 
 ### Page design

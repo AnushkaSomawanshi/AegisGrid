@@ -441,6 +441,7 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
             message_count = 0
         if scenario == "multiple":
             message_count = 2
+        delayed_marker = scenario == "delayed-marker" or parameters.get("delayed_marker") is True
         if not isinstance(processes, list) or not 2 <= len(processes) <= 10 or any(not isinstance(p, str) or not p.strip() or len(p) > 40 for p in processes) or len(set(processes)) != len(processes):
             raise HTTPException(422, "processes must contain 2 to 10 unique process IDs")
         processes = [p.strip() for p in processes]
@@ -496,8 +497,10 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                 ch = channels[f"{other}->{target}"]
                 if other == source:
                     ch["status"] = "closed"
-                    ch["started_at_step"] = len(trace) - 1
-                    ch["closed_at_step"] = len(trace)
+                    ch["started_at_step"] = None
+                    ch["closed_at_step"] = len(trace) - 1
+                    add("channel.recording.closed", process=target, channel=ch["channel"], captured_messages=0,
+                        detail="First marker arrived on this incoming channel; its recorded channel state is empty.")
                 else:
                     ch["status"] = "recording"
                     ch["started_at_step"] = len(trace) + 1
@@ -528,9 +531,11 @@ def _trace_for(lab_id: str, parameters: dict[str, Any]) -> tuple[list[dict[str, 
                     message_id=f"MK-{target}-{other}", detail="First-marker rule: record local state, then send markers.")
         # Deliver all remaining markers; marker on a channel closes that channel's recording.
         for (source, target), sent_step in list(marker_sends.items()):
-            if source == initiator and target in process_states and target != processes[2]:
-                pass
             ch = channels[f"{source}->{target}"]
+            if delayed_marker and source == processes[1] and target == processes[2] and ch["status"] == "recording":
+                add("marker.delivery.delayed", process=target, sender=source, channel=ch["channel"],
+                    message_id=f"MK-{source}-{target}",
+                    detail="Scenario delay keeps this incoming channel recording open for an additional protocol event.")
             if ch["status"] == "recording":
                 add("marker.received", process=target, sender=source, channel=ch["channel"],
                     message_id=f"MK-{source}-{target}", detail="Marker ends recording for this directed channel.")
