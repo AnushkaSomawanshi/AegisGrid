@@ -384,6 +384,9 @@ def test_snapshot_first_marker_closes_its_channel_as_empty():
     close = next(e for e in trace if e['event'] == 'channel.recording.closed' and e['channel'] == 'P1->P3')
     assert first_marker['step'] < close['step']
     assert close['captured_messages'] == 0
+    channel = next(c for c in run['result']['channel_states'] if c['channel'] == 'P1->P3')
+    assert channel['started_at_step'] is None
+    assert channel['closed_at_step'] == first_marker['step']
     assert run['result']['consistent_cut'] is True
 
 def test_vector_clock_default_trace_calculates_all_vectors():
