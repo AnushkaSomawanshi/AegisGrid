@@ -46,7 +46,7 @@ export function MutualExclusionStudio() {
   async function createRun() {
     setBusy(true); setError(""); setNotice(""); setSelectedStep(null);
     try {
-      const response = await api<{ run: Run }>("/experiments", { method: "POST", body: JSON.stringify({ lab_id: "mutex", scenario, parameters: { resource_id: "R-01", resource_name: "Recovery Slot R-01", incident_id: "INC-1042", capacity: 1 } }) });
+      const response = await api<{ run: Run }>("/experiments", { method: "POST", body: JSON.stringify({ lab_id: "mutex", scenario, parameters: { scenario, resource_id: "R-01", resource_name: "Recovery Slot R-01", incident_id: "INC-1042", capacity: 1 } }) });
       setRun(response.run); setNotice("Experiment persisted. Advance the event ledger to observe protocol decisions.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to create experiment"); }
     finally { setBusy(false); }
